@@ -67,6 +67,39 @@ return [
 ];
 ```
 
+### Example Configuration (`Envoy.blade.php`)
+
+```blade
+@include('vendor/autoload.php')
+
+@setup
+    define('LARAVEL_START', microtime(true));
+    $app = require_once __DIR__.'/bootstrap/app.php';
+    $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+    $kernel->bootstrap();
+
+    try {
+        $config = new AxaZara\Bankai\DeploymentConfig($env);
+    } catch (Exception $e) {
+        echo $e->getMessage();
+        exit(1);
+    }
+
+    extract($config->extractVariables());
+
+@endsetup
+
+@import('vendor/axazara/bankai/src/Envoy.blade.php');
+
+@task("run:after_deploy")
+    cd "{{ $releasePath }}"
+@endtask
+
+@task("run:after_rollback")
+    cd "{{ $currentRelease }}"
+@endtask
+```
+
 ## Deployment Steps
 
 ### Step 1: Prepare Deployment Directories
@@ -81,13 +114,15 @@ Creates three key directories:
 - **Releases**: Houses all deployments.
 - **Shared**: For shared resources like `.env` files.
 - **Backup**: Stores backups of releases.
+- **Current**: Symlink pointing to the current release.
+- Your application secret key is generated and stored in `shared/.env`
 
 ### Step 2: Execute Deployment
 
 Deploy with:
 
 ```shell
-php artisan bankai:deploy --env={Your Environment}
+vendor/bin/envoy run deploy --env={Your Environment}
 ```
 
 ### Step 3: Post-Deployment Tasks
@@ -95,23 +130,43 @@ php artisan bankai:deploy --env={Your Environment}
 Add tasks in `Envoy.blade.php` for post-deployment actions:
 These tasks are executed after the deployment is complete.
 
+Example:
 ```blade
 @task("run:after_deploy")
-    cd {{ $release }}
-    php artisan key:generate
-    {{ $php }} artisan db:seed --class=RolesAndPermissionsSeeder
+    cd {{ $releasePath }}
+    php artisan jwt:secret --force
 @endtask
 ```
 
-Use `$release` and `$php` for dynamic task configuration.
+Use the following variables in your tasks:
 - `$releasePath` is the path to the ongoing release directory.
+- `$php` is the path to the PHP binary.
+- `$composer` is the path to the Composer binary.
+
+## Rollback
+You can quickly revert to previous releases if needed:
+
+```shell
+vendor/bin/envoy run deploy:rollback --env={Your Environment}
+```
+### Post-Rollback Tasks
+After rollback, you can run tasks in `Envoy.blade.php`:
+
+```blade
+@task("run:after_rollback")
+    cd {{ $currentRelease }}
+    
+@endtask
+```
+
+You can use the following variables in your tasks:
+- `$currentRelease` is the path to the current release directory.
 - `$php` is the path to the PHP binary.
 - `$composer` is the path to the Composer binary.
 
 ## Additional Commands
 
 - List releases: `vendor/bin/envoy run releases --env=foo`
-- Rollback: `vendor/bin/envoy run rollback --env=foo`
 - List backups: `vendor/bin/envoy run backups --env=foo`
 
 ## Zero-Downtime Deployment Mechanics
