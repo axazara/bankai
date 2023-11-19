@@ -135,4 +135,4 @@ All security vulnerabilities will be promptly addressed.
 
 ## License
 
-The MailZeet Laravel SDK is open-sourced software licensed under the [MIT license](LICENSE.md).
+This project is open-sourced software licensed under the [MIT license](LICENSE.md).
