@@ -6,8 +6,6 @@ use Illuminate\Support\Facades\Validator;
 
 class DeploymentConfig
 {
-    private array $config;
-
     private string $env;
 
     public function __construct(string $env)
@@ -54,34 +52,34 @@ class DeploymentConfig
 
     public function extractVariables(): array
     {
-        $environementSettings = config('bankai.environments.' . $this->env);
+        $environmentSettings = config('bankai.environments.' . $this->env);
 
         return [
             'repositoryUrl'     => config('bankai.settings.repository_url'),
             'slackNotification' => config('bankai.settings.slack_notification'),
             'slackWebhookUrl'   => config('bankai.settings.slack_webhook_url'),
             'appName'           => config('app.name'),
-            'branch'            => $environementSettings['branch'],
-            'sshHost'           => $environementSettings['ssh_host'],
-            'sshUser'           => $environementSettings['ssh_user'],
-            'appUrl'            => $environementSettings['url'],
-            'path'              => $environementSettings['path'],
-            'php'               => $environementSettings['php'],
-            'composer'          => $environementSettings['composer'],
-            'composerOptions'   => $environementSettings['composer_options'],
-            'migration'         => $environementSettings['migration'],
-            'seeder'            => $environementSettings['seeder'],
-            'queueRestart'      => $environementSettings['queue']['restart'],
-            'maintenance'       => $environementSettings['maintenance'],
-            'octaneInstall'     => $environementSettings['octane']['install'],
-            'octaneReload'      => $environementSettings['octane']['reload'],
-            'octaneServer'      => $environementSettings['octane']['server'],
-            'horizonTerminate'  => $environementSettings['horizon']['terminate'],
-            'trimmedPath'       => trim($environementSettings['path'], '/'),
-            'releasesPath'      => trim($environementSettings['path'], '/') . '/releases',
-            'currentPath'       => trim($environementSettings['path'], '/') . '/current',
-            'sharedPath'        => trim($environementSettings['path'], '/') . '/shared',
-            'backupPath'        => trim($environementSettings['path'], '/') . '/backup',
+            'branch'            => $environmentSettings['branch'],
+            'sshHost'           => $environmentSettings['ssh_host'],
+            'sshUser'           => $environmentSettings['ssh_user'],
+            'appUrl'            => $environmentSettings['url'],
+            'path'              => $environmentSettings['path'],
+            'php'               => $environmentSettings['php'],
+            'composer'          => $environmentSettings['composer'],
+            'composerOptions'   => $environmentSettings['composer_options'],
+            'migration'         => $environmentSettings['migration'],
+            'seeder'            => $environmentSettings['seeder'],
+            'queueRestart'      => $environmentSettings['queue']['restart'],
+            'maintenance'       => $environmentSettings['maintenance'],
+            'octaneInstall'     => $environmentSettings['octane']['install'],
+            'octaneReload'      => $environmentSettings['octane']['reload'],
+            'octaneServer'      => $environmentSettings['octane']['server'],
+            'horizonTerminate'  => $environmentSettings['horizon']['terminate'],
+            'trimmedPath'       => trim($environmentSettings['path'], '/'),
+            'releasesPath'      => trim($environmentSettings['path'], '/') . '/releases',
+            'currentPath'       => trim($environmentSettings['path'], '/') . '/current',
+            'sharedPath'        => trim($environmentSettings['path'], '/') . '/shared',
+            'backupPath'        => trim($environmentSettings['path'], '/') . '/backup',
         ];
     }
 }
