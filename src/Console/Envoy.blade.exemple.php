@@ -23,4 +23,7 @@
     # Here you can add your own commands to run after deploy
 @endtask
 
+@task("run:after_rollback")
+    cd "{{ $currentRelease }}"
+@endtask
 

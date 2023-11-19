@@ -29,11 +29,6 @@
 
     $rollbackSuccessMessage = "🔄 ✅ *$appName* has been rolled back to previous release.";
 
-    function sendSlackNotification($message, $slackWebhookUrl)
-    {
-        AxaZara\Bankai\SlackNotification::send($message, $slackWebhookUrl);
-    }
-
 @endsetup
 
 @servers([$env => "{$sshUser}@{$sshHost}"])
@@ -87,6 +82,8 @@
 
 @story('deploy:rollback', ['on' => $env])
     make:rollback
+    run:after_rollback
+    rollack:complete
 @endstory
 
 @task('setup:directories')
@@ -143,7 +140,6 @@
 
 
 @task('deploy:complete')
-
     @if(! empty($slackWebhookUrl))
         curl -X POST -H 'Content-type: application/json' --data '{"text":"{{ $deploymentSuccess }}"}' {{ $slackWebhookUrl }} > /dev/null 2>&1
     @endif
@@ -438,6 +434,10 @@
 @task('make:rollback', ['on' => $env])
     echo "ℹ️ Starting rollback process on {{ $env }} environment";
 
+    cd {{$currentRelease}}
+    {{ $php }} artisan down
+    {{ $php }} artisan cache:clear
+
     # Fetch the current symlink
     current_release=$(readlink {{ $path }}/current)
 
@@ -476,11 +476,17 @@
         echo "✅ → Laravel Horizon terminated";
     @endif
 
+    cd {{ $path }}/current
+    {{ $php }} artisan up
+
+@endtask
+
+@task('rollack:complete')
     @if(! empty($slackWebhookUrl))
         curl -X POST -H 'Content-type: application/json' --data '{"text":"{{ $rollbackSuccessMessage }}"}' {{ $slackWebhookUrl }} > /dev/null 2>&1
     @endif
 
-        echo "✅ → Rollback complete, live at {{ $appUrl }} 🔄";
+    echo "✅ → Rollback complete, live at {{ $appUrl }} 🔄";
 @endtask
 
 @error
