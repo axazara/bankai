@@ -8,7 +8,7 @@ This comprehensive guide covers installation, configuration, and deployment proc
 Begin by integrating Bankai with your Laravel project via Composer:
 
 ```shell
-composer require axazara/bankai
+composer require axazara/bankai --dev
 ```
 
 ## Configuration
