@@ -104,10 +104,9 @@ These tasks are executed after the deployment is complete.
 ```
 
 Use `$release` and `$php` for dynamic task configuration.
-- `$release` is the path to the current release.
+- `$releasePath` is the path to the ongoing release directory.
 - `$php` is the path to the PHP binary.
 - `$composer` is the path to the Composer binary.
-- `$npm` is the path to the NPM binary.
 
 ## Additional Commands
 

@@ -1,29 +1,10 @@
-include('vendor/autoload.php')
+@include('vendor/autoload.php')
 
 @setup
-    define('LARAVEL_START', microtime(true));
-    $app = require_once __DIR__.'/bootstrap/app.php';
-    $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
-    $kernel->bootstrap();
-
-    try {
-        $config = new AxaZara\Bankai\DeploymentConfig($env);
-    } catch (Exception $e) {
-        echo $e->getMessage();
-        exit(1);
-    }
-
-    extract($config->extractVariables());
-
-
     if ( $slackNotification == true ) {
         if ( empty($slackWebhookUrl) ) throw new Exception('🙁⛔️ Error :: your slack webhook is empty');
     }
 
-    $date = date('Y-m-d_H-i-s');
-    $release = $env.'_'.date('YmdHis');
-    $releasePath = "{$path}/releases/{$release}";
-    $path = rtrim($path, '/');
 
     $slackSuccessMessage = "
         *Deployment done 🚀 on $appName*
@@ -77,16 +58,15 @@ include('vendor/autoload.php')
     make:migration
     make:db_seed
     make:install_octane
-    make:clear_cache
-    make:cache
     make:npm_build
     make:restart_queue
     make:horizon:terminate
     make:reload_octane
+    make:cache
+    run:after_deploy
     make:link_current_release
     make:app_up
     make:clean_old_release
-    run:after_deploy
     make:check_app_health
 @endstory
 
@@ -150,6 +130,10 @@ include('vendor/autoload.php')
     echo "✅ → .env moved";
 @endtask
 
+@macro('deploy:complete')
+
+@endmacro
+
 @task('run:after_deploy')
     true
 @endtask
@@ -206,6 +190,16 @@ include('vendor/autoload.php')
 @task('make:symlinks')
     echo "ℹ️ Creating symlinks";
 
+    # Delete the storage directory and .env.exemple if exists
+
+    if [ -d {{ $releasePath }}/storage ]; then
+        rm -rf {{ $releasePath }}/storage
+    fi
+
+    if [ -f {{ $releasePath }}/.env.example ]; then
+        rm -rf {{ $releasePath }}/.env.example
+    fi
+
     # Create symlinks
     ln -s {{ $path}}/shared/storage {{ $path}}/releases/{{ $release }}/storage
     ln -s {{ $path}}/shared/.env {{ $path}}/releases/{{ $release }}/.env
@@ -222,7 +216,12 @@ include('vendor/autoload.php')
     echo "ℹ️ Creating current symlink";
 
     # Create current symlink
-    ln -s {{ $path}}/releases/{{ $release }} {{ $path}}/current
+    ln -nfs {{ $releasePath }} {{ $path}}/current
+
+    if [ ! -L {{ $path}}/current ]; then
+        echo "⛔️ Current symlink could not be created";
+        exit 1;
+    fi
 
     echo "✅ → Current release symlink created";
 @endtask
@@ -331,7 +330,7 @@ include('vendor/autoload.php')
 @endtask
 
 @task('make:cache', ['on' => $env])
-        cd {{ $path }}/current
+        cd {{ $releasePath }}
 
         #Cache
         {{ $php }} artisan route:cache
@@ -371,7 +370,7 @@ include('vendor/autoload.php')
     @if ($octaneReload === true )
         echo "ℹ️ → Stop Octane in Old Release";
 
-        cd {{ $releasePath }}
+        cd {{ $currentRelease }}
         {{ $php }} artisan octane:stop --no-interaction
 
         echo "✅ → Octane stopped in old release, it will be restarted in new release by supervisor";
@@ -395,15 +394,14 @@ include('vendor/autoload.php')
 @task('make:app_up', ['on' => $env])
     # Take app out of maintenance mode
     {{ $php }} {{ $path }}/current/artisan up
-    echo "✅ -> App is up and running";
+    echo "✅ -> App is go live";
 @endtask
 
 @task('make:clean_old_release', ['on' => $env])
     # -> Cleanup old releases;
-
     cd {{ $path}}/releases
 
-    for RELEASE in $(ls -1d * | head -n -3 }); do
+    for RELEASE in $(ls -1d * | head -n -3); do
         echo "Deleting old release $RELEASE"
         rm -rf "$RELEASE"
     done
