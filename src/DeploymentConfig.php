@@ -82,7 +82,6 @@ class DeploymentConfig
             'currentPath'       => trim($environementSettings['path'], '/') . '/current',
             'sharedPath'        => trim($environementSettings['path'], '/') . '/shared',
             'backupPath'        => trim($environementSettings['path'], '/') . '/backup',
-            'branch'            => $environementSettings['branch'],
         ];
     }
 }

@@ -129,7 +129,9 @@ Contributions are welcome.
 
 ## Security Vulnerabilities
 
-If you discover a security vulnerability within MailZeet Laravel SDK, please send an e-mail to MailZeet Security via [hello@mailzeet.com](mailto:security@mailzeet.com). All security vulnerabilities will be promptly addressed.
+If you discover a security vulnerability within this package,
+please send an e-mail to MailZeet Security via [hello@axazara.com](mailto:security@axazara.com).
+All security vulnerabilities will be promptly addressed.
 
 ## License
 
