@@ -61,7 +61,6 @@ class DeploymentConfig
 
         return [
             'repositoryUrl'      => config('bankai.settings.repository_url'),
-            'slackNotification'  => config('bankai.settings.slack_notification'),
             'slackWebhookUrl'    => config('bankai.settings.slack_webhook_url'),
             'appName'            => config('app.name'),
             'branch'             => $environmentSettings['branch'],

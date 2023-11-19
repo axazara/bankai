@@ -3,7 +3,6 @@
 return [
     'settings' => [
         'repository'         => 'your-repository',
-        'slack_notification' => false,
         'slack_webhook'      => 'https://hooks.slack.com/services/your-webhook',
         'slack_channel'      => '#deployment',
     ],

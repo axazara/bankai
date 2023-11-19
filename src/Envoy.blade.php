@@ -1,10 +1,6 @@
 @include('vendor/autoload.php')
 
 @setup
-    if ( $slackNotification == true ) {
-        if ( empty($slackWebhookUrl) ) throw new Exception('🙁⛔️ Error :: your slack webhook is empty');
-    }
-
     $deploymentSuccess = "
         *Deployment done 🚀 on $appName*
         *→ App name:* $appName
@@ -30,6 +26,14 @@
         *→ SSH Host:* $sshHost
         *→ Date:* $date
     ";
+
+    $rollbackSuccessMessage = "🔄 ✅ *$appName* has been rolled back to previous release.";
+
+    function sendSlackNotification($message, $slackWebhookUrl)
+    {
+        AxaZara\Bankai\SlackNotification::send($message, $slackWebhookUrl);
+    }
+
 @endsetup
 
 @servers([$env => "{$sshUser}@{$sshHost}"])
@@ -133,11 +137,15 @@
     true
 @endtask
 
+@task('run:after_rollback')
+    true
+@endtask
+
+
 @task('deploy:complete')
-   @if ($slackNotification === true)
-        @slack($slackWebhookUrl, '', $deploymentSuccess)
-    @else
-        echo "🌈 → Slack notification skipped";
+
+    @if(! empty($slackWebhookUrl))
+        curl -X POST -H 'Content-type: application/json' --data '{"text":"{{ $deploymentSuccess }}"}' {{ $slackWebhookUrl }} > /dev/null 2>&1
     @endif
 
     echo "✅ → Deployment complete, live at {{ $appUrl }} 🚀";
@@ -468,27 +476,18 @@
         echo "✅ → Laravel Horizon terminated";
     @endif
 
-    @php
-        $rollBackMessage = "🔄 ✅ *$appName* has been rolled back to previous release.";
-    @endphp
-
-    @if ($slackNotification === true)
-        @slack($slackWebhookUrl, '', $rollBackMessage)
-    @else
-        echo "🌈 → Slack notification skipped";
+    @if(! empty($slackWebhookUrl))
+        curl -X POST -H 'Content-type: application/json' --data '{"text":"{{ $rollbackSuccessMessage }}"}' {{ $slackWebhookUrl }} > /dev/null 2>&1
     @endif
 
-    echo "✅ → Rollback complete, live at {{ $appUrl }} 🔄";
+        echo "✅ → Rollback complete, live at {{ $appUrl }} 🔄";
 @endtask
 
 @error
-    @if ($slackNotification === true)
-        @slack($slackWebhookUrl, '', $deploymentFailed)
-    @else
-        echo "🌈 → Slack notification skipped";
-    @endif
+    @slack($slackWebhookUrl, '', "$task failed on $appName");
 
     echo "❌ ❌ ❌ → Envoy task has been failed";
+
 @enderror
 
 @success
