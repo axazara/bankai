@@ -5,8 +5,7 @@
         if ( empty($slackWebhookUrl) ) throw new Exception('🙁⛔️ Error :: your slack webhook is empty');
     }
 
-
-    $slackSuccessMessage = "
+    $deploymentSuccess = "
         *Deployment done 🚀 on $appName*
         *→ App name:* $appName
         *→ Environment:* $env
@@ -19,8 +18,8 @@
         *→ Date:* $date
     ";
 
-    $slackFailedMessage = "
-        *Deployment failed 🚨on $appName*
+    $deploymentFailed = "
+        *Task failed on 🚨on $appName*
         *→ App name:* $appName
         *→ Environment:* $env
         *→ URL:* $appUrl
@@ -34,7 +33,6 @@
 @endsetup
 
 @servers([$env => "{$sshUser}@{$sshHost}"])
-
 
 @story('setup' , ['on' => $env])
     setup:directories
@@ -68,6 +66,7 @@
     make:app_up
     make:clean_old_release
     make:check_app_health
+    deploy:complete
 @endstory
 
 @task('display_info')
@@ -130,12 +129,18 @@
     echo "✅ → .env moved";
 @endtask
 
-@macro('deploy:complete')
-
-@endmacro
-
 @task('run:after_deploy')
     true
+@endtask
+
+@task('deploy:complete')
+   @if ($slackNotification === true)
+        @slack($slackWebhookUrl, '', $deploymentSuccess)
+    @else
+        echo "🌈 → Slack notification skipped";
+    @endif
+
+    echo "✅ → Deployment complete, live at {{ $appUrl }} 🚀";
 @endtask
 
 @task('setup:generate_app_key')
@@ -255,19 +260,6 @@
         echo "Deploy directory does not exist on server. Run 'envoy run setup' to set up your deployment directory.";
         exit 1;
     fi
-@endtask
-
-@task('make:roles_and_permissions', ['on' => $env])
-    @if ($rolesAndPermissions === true)
-        echo "ℹ️ Running roles and permissions seeder"
-
-        cd {{ $releasePath }}
-        {{ $php }} artisan db:seed --class=RolesAndPermissionsSeeder
-
-        echo "✅ → Roles and permissions seeder complete"
-    @else
-        echo "🌈 → Roles and permissions seeder skipped"
-    @endif
 @endtask
 
 @task('make:app_down')
@@ -415,16 +407,6 @@
     curl -s -o /dev/null -w "%{http_code}" {{ $appUrl }} | grep 200 > /dev/null 2>&1 || (echo "App is down 😣" && exit 1) && echo "App is up and running 🎉";
 @endtask
 
-@task('deploy:slack', ['on' => $env])
-    @if ($slackNotification === true)
-        # -> Send slack notification;
-        curl -X POST -H 'Content-type: application/json' --data '{"text":"{{ $slackSuccessMessage }}"}' {{ $slackWebhookUrl }} > /dev/null 2>&1
-        echo "✅ → Slack notification sent";
-    @else
-        echo "🌈 → Slack notification skipped";
-    @endif
-@endtask
-
 @story('backups')
     backups:list
 @endstory
@@ -487,11 +469,11 @@
     @endif
 
     @php
-        $rollBackMessage = "🔄 *$appName* has been rolled back to previous release.";
+        $rollBackMessage = "🔄 ✅ *$appName* has been rolled back to previous release.";
     @endphp
 
     @if ($slackNotification === true)
-        @slack($slackWebhookUrl, '', $slackFailedMessage);
+        @slack($slackWebhookUrl, '', $rollBackMessage)
     @else
         echo "🌈 → Slack notification skipped";
     @endif
@@ -500,6 +482,12 @@
 @endtask
 
 @error
+    @if ($slackNotification === true)
+        @slack($slackWebhookUrl, '', $deploymentFailed)
+    @else
+        echo "🌈 → Slack notification skipped";
+    @endif
+
     echo "❌ ❌ ❌ → Envoy task has been failed";
 @enderror
 
