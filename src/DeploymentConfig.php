@@ -48,6 +48,20 @@ class DeploymentConfig
         if ($validator->fails()) {
             throw new \RuntimeException(message: 'Validation error: ' . $validator->errors());
         }
+
+        $settings = config('bankai.settings');
+
+        $settingsRules = [
+            'repository_url'    => 'required|url',
+            'slack_webhook_url' => 'nullable|url',
+        ];
+
+        $validator = Validator::make($settings, $settingsRules);
+
+        if ($validator->fails()) {
+            throw new \RuntimeException(message: 'Validation error: ' . $validator->errors());
+        }
+
     }
 
     public function extractVariables(): array

@@ -32,8 +32,7 @@ return [
     // General settings for the deployment
     'settings' => [
         'repository' => 'your-repository', // Specify the Git repository URL
-        'slack_notification' => false, // Set true to enable Slack notifications
-        'slack_webhook' => 'https://hooks.slack.com/services/your-webhook', // Slack webhook URL
+        'slack_webhook' => 'https://hooks.slack.com/services/your-webhook', // Slack webhook URL, leave empty to disable
         'slack_channel' => '#deployment', // Slack channel for notifications
     ],
 
