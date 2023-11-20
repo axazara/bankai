@@ -183,7 +183,7 @@
 @endtask
 
 @task('make:npm_build')
-    cd "{{ $assetsPath }}"
+    cd "{{ $releasePath }}"
 
     if [ -f "package.json" ]; then
         if [ -f "yarn.lock" ]; then
