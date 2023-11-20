@@ -165,10 +165,10 @@
 @endtask
 
 @task('make:npm_install')
+    cd {{ $releasePath }}
+
     if [ -f "package.json" ]; then
             echo "ℹ️ Running npm install"
-
-            cd {{ $releasePath }}
 
             if [ -f "yarn.lock" ]; then
                 yarn install --immutable
