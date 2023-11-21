@@ -191,6 +191,8 @@
         else
             npm run production
         fi
+
+        echo "✅ → Npm build complete"
     else
         echo "🌈 → Npm build skipped, no package.json file found"
     fi
