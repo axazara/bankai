@@ -366,12 +366,20 @@
 @task('make:reload_octane', ['on' => $env])
     #check if octane is running and reload
     @if ($octaneReload === true )
-        echo "ℹ️ → Stop Octane in Old Release";
+        {{ $php }} artisan octane:status --no-interaction | grep 'Server is running'
+        OCTANE_RUNNING=$?
 
-        cd {{ $currentRelease }}
-        {{ $php }} artisan octane:stop --no-interaction
+        if [ $OCTANE_RUNNING -eq 0 ]; then
+            echo "ℹ️ → Reloading Octane";
 
-        echo "✅ → Octane stopped in old release, it will be restarted in new release by supervisor";
+            cd {{ $currentRelease }}
+            {{ $php }} artisan octane:reload --no-interaction
+
+            echo "✅ → Octane reloaded in new release";
+        else
+            echo "🌈️ → Octane is not running, reload skipped";
+        fi
+
     @else
         echo "🌈 → Octane restart skipped";
     @endif
