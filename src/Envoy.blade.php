@@ -296,17 +296,6 @@
     {{ $php }} artisan route:clear
     {{ $php }} artisan view:clear
 
-    OLD_RELEASE=$(find {{ $path }}/releases/ -maxdepth 1 -type d -name "{{$env}}*" | sort -r | head -n 2 | tail -n 1)
-
-    cd $OLD_RELEASE
-
-    # Clear cache
-    {{ $php }} artisan optimize:clear
-    {{ $php }} artisan config:clear
-    {{ $php }} artisan route:clear
-    {{ $php }} artisan view:clear
-
-
     echo "✅ → App cache cleared";
 @endtask
 
