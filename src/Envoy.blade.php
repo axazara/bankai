@@ -55,7 +55,6 @@
     make:migration
     make:db_seed
     make:install_octane
-    make:npm_build
     make:restart_queue
     make:horizon:terminate
     make:reload_octane
@@ -179,22 +178,6 @@
             echo "✅ → Npm install complete"
     else
         echo "🌈 → Npm install skipped, no package.json file found"
-    fi
-@endtask
-
-@task('make:npm_build')
-    cd {{ $releasePath }}
-
-    if [ -f "package.json" ]; then
-        if [ -f "yarn.lock" ]; then
-            yarn run production
-        else
-            npm run production
-        fi
-
-        echo "✅ → Npm build complete"
-    else
-        echo "🌈 → Npm build skipped, no package.json file found"
     fi
 @endtask
 
