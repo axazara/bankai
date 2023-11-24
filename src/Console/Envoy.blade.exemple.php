@@ -26,4 +26,3 @@
 @task("run:after_rollback")
     cd "{{ $currentRelease }}"
 @endtask
-
