@@ -61,7 +61,6 @@ class DeploymentConfig
         if ($validator->fails()) {
             throw new \RuntimeException(message: 'Validation error: ' . $validator->errors());
         }
-
     }
 
     public function extractVariables(): array
