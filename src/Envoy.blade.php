@@ -374,7 +374,7 @@
 
        if [ $( {{ $php }} artisan octane:status --no-interaction 2>&1 | grep -c 'server is running' ) -gt 0 ]; then
 
-        Echo "ℹ️ → Octane is running. Stopping it in old release and it will be restarted in new release by supervisor."
+        echo "ℹ️ → Octane is running. Stopping it in old release and it will be restarted in new release by supervisor."
 
         # Stop Octane
         {{ $php }} artisan octane:stop --no-interaction
