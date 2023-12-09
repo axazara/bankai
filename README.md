@@ -183,20 +183,22 @@ You can use the following variables in your tasks:
 ## Sentry Integration
 Bankai supports Sentry integration for release tracking. 
 If enabled, Bankai will automatically create a new release in Sentry after each deployment.
-To enable Sentry integration, add the following to your `.env` file:
+To enable Sentry integration, add the following to bloc `bankai.php` (config file):
 
-```dotenv
-BANKAI_SENTRY_ENABLED=true
-SENTRY_ORGANIZATION=your-organization
-SENTRY_PROJECT=your-project
-SENTRY_AUTH_TOKEN=your-auth-token
-SENTRY_VERSION=your-version 
+```php
+ 'sentry' => [
+        'enabled'            => false,
+        'organization'       => 'your-organization',
+        'project'            => 'your-project',
+        'token'              => 'your-token',
+        'version'            => null // If null, the release will be the current release name, otherwise it will be the value of this key
+    ],
 ```
-- `BANKAI_SENTRY_ENABLED`: Set to `true` to enable Sentry integration.
-- `SENTRY_ORGANIZATION`: Your Sentry organization.
-- `SENTRY_PROJECT`: Your Sentry project.
-- `SENTRY_AUTH_TOKEN`: Your Sentry auth token. Learn more [here](https://docs.sentry.io/product/accounts/auth-tokens).
-- `SENTRY_VERSION`: Your Sentry release version. Defaults to the current release name.
+- `sentry.enabled`: Set to `true` to enable Sentry integration.
+- `sentry.organization`: Your Sentry organization.
+- `sentry.project`: Your Sentry project.
+- `sentry.token`: Your Sentry auth token. Learn more [here](https://docs.sentry.io/product/accounts/auth-tokens).
+- `sentry.version`: Your Sentry release version. Defaults to the current release name.
 
 ## Contributing
 

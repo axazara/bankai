@@ -8,11 +8,11 @@ return [
     ],
 
     'sentry' => [
-        'enabled'            => env('BANKAI_SENTRY_ENABLED', false),
-        'organization'       => env('SENTRY_ORGANIZATION'),
-        'project'            => env('SENTRY_PROJECT'),
-        'token'              => env('SENTRY_AUTH_TOKEN'),
-        'version'            => env('SENTRY_VERSION'), // If null, the release will be the current release name, otherwise it will be the value of this key
+        'enabled'            => false,
+        'organization'       => 'your-organization',
+        'project'            => 'your-project',
+        'token'              => 'your-token',
+        'version'            => null, // If null, the release will be the current release name, otherwise it will be the value of this key
     ],
 
     'environments' => [
