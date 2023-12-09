@@ -3,6 +3,10 @@
 Bankai offers a streamlined solution for achieving zero-downtime deployments in Laravel applications using [Envoy](https://laravel.com/docs/10.x/envoy). 
 This comprehensive guide covers installation, configuration, and deployment processes, complete with examples and detailed explanations.
 
+## Requirements
+- PHP 8.1 or higher
+- Laravel 9.x
+
 ## Installation
 
 Begin by integrating Bankai with your Laravel project via Composer:
@@ -175,6 +179,24 @@ You can use the following variables in your tasks:
 3. **Shared Resources**: Consistency across deployments is maintained via shared directories and files.
 4. **Rollbacks**: Quickly revert to previous releases if needed.
 5. **Maintenance**: Post-deployment, old releases can be cleaned up.
+
+## Sentry Integration
+Bankai supports Sentry integration for release tracking. 
+If enabled, Bankai will automatically create a new release in Sentry after each deployment.
+To enable Sentry integration, add the following to your `.env` file:
+
+```dotenv
+BANKAI_SENTRY_ENABLED=true
+SENTRY_ORGANIZATION=your-organization
+SENTRY_PROJECT=your-project
+SENTRY_AUTH_TOKEN=your-auth-token
+SENTRY_VERSION=your-version 
+```
+- `BANKAI_SENTRY_ENABLED`: Set to `true` to enable Sentry integration.
+- `SENTRY_ORGANIZATION`: Your Sentry organization.
+- `SENTRY_PROJECT`: Your Sentry project.
+- `SENTRY_AUTH_TOKEN`: Your Sentry auth token. Learn more [here](https://docs.sentry.io/product/accounts/auth-tokens).
+- `SENTRY_VERSION`: Your Sentry release version. Defaults to the current release name.
 
 ## Contributing
 

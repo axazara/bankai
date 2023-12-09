@@ -17,7 +17,7 @@ class DeploymentConfig
     public function extractVariables(): array
     {
         $environmentSettings = $this->getConfig('bankai.environments.' . $this->env);
-        $release = $this->env . '_' . date('YmdHis');
+        $release = $this->env . '_' . date('Ymd') . '_' . date('His');
         $path = rtrim($environmentSettings['path'], '/');
 
         return array_merge(
