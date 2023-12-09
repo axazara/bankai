@@ -7,6 +7,14 @@ return [
         'slack_channel'      => '#deployment',
     ],
 
+    'sentry' => [
+        'enabled'            => false,
+        'organization'       => 'your-organization-slug',
+        'project'            => 'your-project-slug',
+        'token'              => 'your-token',
+        'version'            => null, // If null, the release will be the current release name, otherwise it will be the value of this key
+    ],
+
     'environments' => [
         'staging' => [
             'ssh_host'               => 'your-host',

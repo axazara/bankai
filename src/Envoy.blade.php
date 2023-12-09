@@ -61,18 +61,20 @@
     make:reload_octane
     make:clean_old_release
     make:check_app_health
+    sentry:release
     deploy:complete
 @endstory
 
 @task('display_info')
     echo "ℹ️ Deployment Information:";
-    echo "→ Deployment path: {{ $trimmedPath }}";
+    echo "→ Deployment path: {{ $releasePath }}";
     echo "→ Current release: {{ $release }}";
     echo "→ Releases path: {{ $releasesPath }}";
     echo "→ Shared path: {{ $sharedPath }}";
     echo "→ Repository: {{ $repositoryUrl }}";
     echo "→ Branch: {{ $branch }}";
     echo "→ URL: {{ $appUrl }}";
+    echo "→ Environment: {{ $env }}";
     echo "→ Backup path: {{ $backupPath }}";
 @endtask
 
@@ -96,6 +98,7 @@
         ";
     @endphp
 
+    START=$(date +%s)
     true
 @endtask
 
@@ -168,6 +171,10 @@
    true
 @endtask
 
+@task('deploy:durations')
+   NOW=$(date +%s)
+   ELAPSED=$((NOW-START))
+@endtask
 
 @task('deploy:complete')
    @if(! empty($slackWebhookUrl))
@@ -424,6 +431,41 @@
    # -> Check if application is up and running;
    #check if the site is up and return http status code 200
    curl -s -o /dev/null -w "%{http_code}" {{ $appUrl }} | grep 200 > /dev/null 2>&1 || (echo "App is down 😣" && exit 1) && echo "App is up and running 🎉";
+@endtask
+
+@task('sentry:release', ['on' => $env])
+   # -> Record release in Sentry;
+
+    @if ((bool) $sentryEnabled === true)
+
+        echo "ℹ️ Recording release in Sentry";
+
+        mkdir -p /tmp/sentry_cli_installation
+        cd /tmp/sentry_cli_installation
+        wget https://github.com/getsentry/sentry-cli/releases/download/2.23.0/sentry-cli-Linux-x86_64 -O sentry-cli --quiet
+        chmod +x sentry-cli
+
+
+        # Setup configuration values
+        export SENTRY_AUTH_TOKEN={{ $sentryToken }}
+        export SENTRY_ORG={{ $sentryOrg}}
+        export SENTRY_PROJECT={{ $sentryProject }}
+        export VERSION={{ $sentryVersion }}
+        export ENVIRONMENT={{ $env }}
+
+        # Create a release
+        # Workflow to create releases
+
+        cd /tmp/sentry_cli_installation
+        ./sentry-cli releases new -p "$SENTRY_PROJECT" "$VERSION"
+        ./sentry-cli releases deploys "$VERSION" new -e "$ENVIRONMENT" --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" --version "$VERSION"
+
+        rm -rf /tmp/sentry_cli_installation
+
+    @else
+        echo "🌈 → Sentry release skipped";
+    @endif
+
 @endtask
 
 @story('backups')

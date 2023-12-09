@@ -16,7 +16,7 @@
         }
     ],
     "require": {
-        "php": "^8.0",
+        "php": "^8.1",
         "laravel/envoy": "^2.0"
     },
     "require-dev": {
