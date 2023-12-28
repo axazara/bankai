@@ -53,7 +53,7 @@ trait ConfigValidationTrait
             'maintenance'       => 'required|boolean',
             'octane.install'    => 'required|boolean',
             'octane.reload'     => 'required|boolean',
-            'octane.server'     => 'required|in:roadrunner,swoole',
+            'octane.server'     => 'required|in:roadrunner,swoole,frankenphp,openswoole',
             'horizon.terminate' => 'required|boolean',
         ];
     }
