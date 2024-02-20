@@ -247,6 +247,10 @@
 @task('make:link_current_release')
    echo "ℹ️ Creating current symlink";
 
+    if [ -L {{ $path}}/current ]; then
+         rm -rf {{ $path}}/current
+    fi
+
    # Create current symlink
    ln -nfs {{ $releasePath }} {{ $path}}/current
 

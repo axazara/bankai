@@ -5,7 +5,7 @@ This comprehensive guide covers installation, configuration, and deployment proc
 
 ## Requirements
 - PHP 8.1 or higher
-- Laravel 9.x
+- Laravel 9.x, 10.x, 11.x
 
 ## Installation
 
@@ -70,6 +70,8 @@ return [
 ];
 ```
 
+PS: Currently, Bankai does not work with FrankenPHP for Laravel octane.
+
 ### Example Configuration (`Envoy.blade.php`)
 
 ```blade
@@ -110,7 +112,7 @@ return [
 Setup your deployment environment:
 
 ```shell
-vendor/bin/envoy run deploy --env={Your Environment}
+vendor/bin/envoy run setup --env={Your Environment}
 ```
 
 Creates three key directories:
@@ -120,6 +122,8 @@ Creates three key directories:
 - **Current**: Symlink pointing to the current release.
 - Your application secret key is generated and stored in `shared/.env`
 
+PS : This is a one-time setup, and generally, do from your local machine.
+
 ### Step 2: Execute Deployment
 
 Deploy with:
@@ -127,6 +131,9 @@ Deploy with:
 ```shell
 vendor/bin/envoy run deploy --env={Your Environment}
 ```
+
+PS : This can be run from your local machine, or from your CI/CD pipeline.
+At [Axa Zara](https://axazara.coom), we automatically deploy our applications after each merge to the `staging` or `release` branch via Gitlab CI/CD.
 
 ### Step 3: Post-Deployment Tasks
 
@@ -145,6 +152,11 @@ Use the following variables in your tasks:
 - `$releasePath` is the path to the ongoing release directory.
 - `$php` is the path to the PHP binary.
 - `$composer` is the path to the Composer binary.
+
+### Step 4: Configure your Web Server
+You can configure your web server to serve the application from the `current/public` directory.
+For exemple is your use [Laravel Forge](https://forge.laravel.com/), your should set your website directory to `current/public`.
+`current/public` will always point to the latest release.
 
 ## Rollback
 You can quickly revert to previous releases if needed:
