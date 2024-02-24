@@ -52,12 +52,12 @@
     make:migration
     make:db_seed
     make:install_octane
-    make:restart_queue
-    make:horizon:terminate
     make:cache
     run:after_deploy
     make:link_current_release
     make:app_up
+    make:restart_queue
+    make:horizon:terminate
     make:reload_octane
     make:clean_old_release
     make:check_app_health
@@ -342,8 +342,16 @@
 @endtask
 
 @task('make:cache', ['on' => $env])
-       cd {{ $releasePath }}
 
+        cd {{ $path }}/current
+        {{ $php }} artisan optimize:clear
+        {{ $php }} artisan config:clear
+        {{ $php }} artisan route:clear
+        {{ $php }} artisan view:clear
+        echo "✅ → App cache cleared in previous release";
+
+
+       cd {{ $releasePath }}
        #Cache
        {{ $php }} artisan route:cache
        {{ $php }} artisan view:cache
@@ -416,7 +424,7 @@
 @task('make:app_up', ['on' => $env])
    # Take app out of maintenance mode
    {{ $php }} {{ $path }}/current/artisan up
-   echo "✅ -> App is go live";
+   echo "✅ -> App is up";
 @endtask
 
 @task('make:clean_old_release', ['on' => $env])
