@@ -61,7 +61,13 @@ trait ConfigValidationTrait
     private function getSettingsRules(): array
     {
         return [
-            'repository_url'    => 'required|url',
+            'repository_url'    => ['required', function ($attribute, $value, $fail) {
+                if (! filter_var($value, FILTER_VALIDATE_URL)
+                    || ! str_starts_with($value, 'git@')
+                ) {
+                    $fail('The repository URL must be a valid URL or an SSH URL');
+                }
+            }],
             'slack_webhook_url' => 'nullable|url',
         ];
     }
