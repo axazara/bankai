@@ -61,7 +61,7 @@ trait ConfigValidationTrait
     private function getSettingsRules(): array
     {
         return [
-            'repository_url'    => 'required|url',
+            'repository_url'    => ['required', 'string'],
             'slack_webhook_url' => 'nullable|url',
         ];
     }
