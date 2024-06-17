@@ -251,6 +251,10 @@
          rm -rf {{ $path}}/current
     fi
 
+    if [ -d {{ $releasePath }}/current ]; then
+        rm -rf {{ $releasePath }}/current
+    fi
+
    # Create current symlink
    ln -nfs {{ $releasePath }} {{ $path}}/current
 
