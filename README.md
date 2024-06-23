@@ -219,7 +219,7 @@ Contributions are welcome.
 ## Security Vulnerabilities
 
 If you discover a security vulnerability within this package,
-please send an e-mail to MailZeet Security via [hello@axazara.com](mailto:security@axazara.com).
+please send an e-mail to Axa Zara Security via [hello@axazara.com](mailto:security@axazara.com).
 All security vulnerabilities will be promptly addressed.
 
 ## License
