@@ -2,6 +2,69 @@
 
 Guidance for Claude Code and other AI agents working in this repository.
 
+## Project overview
+
+Bankai is a Laravel Composer package (installed as a `--dev` dependency) that provides zero-downtime deployments for Laravel applications via [Laravel Envoy](https://laravel.com/docs/envoy). It ships an Artisan install command, a configuration file, and a reusable `Envoy.blade.php` task library that host projects include in their own Envoy scripts. The package supports deployment, rollback, Slack notifications, and optional Sentry release tracking.
+
+## Tech stack
+
+- PHP ^8.1
+- Laravel Envoy ^2.0 (runtime dependency)
+- Laravel 9.x / 10.x / 11.x (host application; tested via Orchestra Testbench ^7.29)
+- PHPUnit ^9.6 / ^10.0 / ^11.0 (testing)
+- Larastan / PHPStan level 4 (static analysis)
+- axazara/php-cs-fixer (axazara/php-cs ^0.1) for code style
+
+## Getting started
+
+```bash
+composer install
+
+# Copy and adjust phpstan config if needed
+# No .env file is required for the package itself
+```
+
+To use Bankai inside a host Laravel application:
+
+```bash
+composer require axazara/bankai --dev
+php artisan bankai:install   # publishes config/bankai.php and Envoy.blade.php
+```
+
+## Common commands
+
+| Task | Command |
+|---|---|
+| Static analysis | `composer analyse` |
+| Check code style (dry-run) | `composer sniff` |
+| Fix code style | `composer format` |
+| Scan unused code | `composer unused` |
+| Run tests | `vendor/bin/phpunit` |
+
+## Architecture
+
+```
+src/
+  Providers/BankaiServiceProvider.php   # Registers the package; publishes config + Envoy template
+  Console/BankaiInstall.php             # `php artisan bankai:install` command
+  DeploymentConfig.php                  # Loads and validates bankai.php config for a given env
+  Traits/ConfigValidationTrait.php      # Shared validation helpers for deployment config
+  Slack.php / SlackNotification.php     # Slack webhook notification helpers
+  Envoy.blade.php                       # Core Envoy tasks: setup, deploy, deploy:rollback, releases, backups
+  bankai.php                            # Default config stub published to host app
+config/                                 # (empty / mirrors src/bankai.php)
+```
+
+The deployment flow is entirely Envoy-driven: `setup` provisions release/shared/backup/current directories on the remote server; `deploy` clones the repo into a new timestamped release, links shared `.env`, runs Composer, optional migrations/seeders, switches the `current` symlink, then restarts Horizon/queues/Octane as configured; `deploy:rollback` reinstates the previous symlink.
+
+## Conventions
+
+- Code style is enforced by `axazara/php-cs` (PHP CS Fixer rules); run `composer sniff` to check and `composer format` to auto-fix before committing.
+- Static analysis runs at PHPStan level 4 with Larastan; run `composer analyse` and fix all errors before opening a PR.
+- Tests live under `tests/` and use PHPUnit with Orchestra Testbench; the test suite is currently sparse.
+- The package registers itself via Laravel's package auto-discovery (`extra.laravel.providers`); no manual registration is needed by consumers.
+- Supports multiple named deployment environments defined in `config/bankai.php`; environment name is passed at runtime via `--env={name}`.
+
 ## Git Conventions
 
 ### 1. Branch names
