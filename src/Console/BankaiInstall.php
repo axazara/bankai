@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace AxaZara\Bankai\Console;
 
 use AxaZara\Bankai\Providers\BankaiServiceProvider;
@@ -10,69 +12,74 @@ final class BankaiInstall extends Command
 {
     protected $signature = 'bankai:install';
 
-    protected $description = 'Setup Bankai Laravel Package';
+    protected $description = 'Install Bankai: publish the configuration and the base Envoy.blade.php';
 
-    public function handle(): void
+    public function handle(): int
     {
-        $this->info(string: 'Setting up Bankai Laravel Package...');
+        $this->info('Installing Bankai...');
 
-        $this->info(string: 'Publishing configuration...');
-
-        if (! $this->configExists()) {
-            $this->publishConfiguration();
-            $this->info(string: 'Published configuration');
-        } elseif ($this->shouldOverwriteConfig()) {
-            $this->info(string: 'Overwriting configuration file...');
-            $this->publishConfiguration($force = true);
-        } else {
-            $this->info(string: 'Existing configuration was not overwritten');
-        }
-
-        $this->info(string: 'Publishing Envoy file...');
+        $this->publishConfigurationFile();
         $this->publishEnvoyFile();
-        $this->info(string: 'Published Envoy file');
 
-        $this->info(string: 'Bankai Laravel Package setup successfully.');
+        $this->info('Bankai installed successfully.');
+
+        return self::SUCCESS;
     }
 
-    /**
-     * Publish the Envoy file.
-     */
-    public function publishEnvoyFile(): void
+    private function publishConfigurationFile(): void
     {
-        $envoyFile = app()->path() . '/../Envoy.blade.php';
+        if (! $this->configurationExists()) {
+            $this->publishConfiguration();
+            $this->info('Published the configuration file.');
 
-        if (! File::exists($envoyFile)) {
-            File::copy(
-                path: __DIR__ . '/Envoy.blade.exemple.php',
-                target: $envoyFile
-            );
+            return;
         }
+
+        if ($this->shouldOverwriteConfiguration()) {
+            $this->publishConfiguration(force: true);
+            $this->info('Overwrote the configuration file.');
+
+            return;
+        }
+
+        $this->info('The existing configuration file was left untouched.');
     }
 
-    private function configExists(): bool
+    private function publishEnvoyFile(): void
     {
-        return File::exists(config_path(path: 'bankai.php'));
+        $envoyFile = base_path('Envoy.blade.php');
+
+        if (File::exists($envoyFile)) {
+            $this->info('The existing Envoy.blade.php was left untouched.');
+
+            return;
+        }
+
+        File::copy(__DIR__ . '/stubs/Envoy.blade.php.stub', $envoyFile);
+        $this->info('Created Envoy.blade.php in the project root.');
     }
 
-    private function shouldOverwriteConfig(): bool
+    private function configurationExists(): bool
     {
-        return $this->confirm(
-            question: 'Config file already exists. Do you want to overwrite it?',
-            default: false
-        );
+        return File::exists(config_path('bankai.php'));
     }
 
-    private function publishConfiguration($forcePublish = false): void
+    private function shouldOverwriteConfiguration(): bool
+    {
+        return $this->confirm('The bankai.php config file already exists. Overwrite it?', default: false);
+    }
+
+    private function publishConfiguration(bool $force = false): void
     {
         $params = [
             '--provider' => BankaiServiceProvider::class,
             '--tag'      => 'config',
         ];
 
-        if ($forcePublish === true) {
+        if ($force) {
             $params['--force'] = true;
         }
+
         $this->call('vendor:publish', $params);
     }
 }

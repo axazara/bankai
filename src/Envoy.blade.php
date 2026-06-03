@@ -141,7 +141,7 @@
    echo "Cloning repository";
 
    cd {{ $releasesPath }}
-   git clone {{ $repositoryUrl }} --branch={{ $branch }} --depth=1 -q {{ $release }}
+   git clone "{{ $repositoryUrl }}" --branch="{{ $branch }}" --depth=1 -q "{{ $release }}"
    echo "Repository cloned";
 @endtask
 
@@ -402,11 +402,11 @@
        wget https://github.com/getsentry/sentry-cli/releases/download/2.23.0/sentry-cli-Linux-x86_64 -O sentry-cli --quiet
        chmod +x sentry-cli
 
-       export SENTRY_AUTH_TOKEN={{ $sentryToken }}
-       export SENTRY_ORG={{ $sentryOrg }}
-       export SENTRY_PROJECT={{ $sentryProject }}
-       export VERSION={{ $sentryVersion }}
-       export ENVIRONMENT={{ $env }}
+       export SENTRY_AUTH_TOKEN="{{ $sentryToken }}"
+       export SENTRY_ORG="{{ $sentryOrg }}"
+       export SENTRY_PROJECT="{{ $sentryProject }}"
+       export VERSION="{{ $sentryVersion }}"
+       export ENVIRONMENT="{{ $env }}"
 
        ./sentry-cli releases new -p "$SENTRY_PROJECT" "$VERSION"
        ./sentry-cli releases deploys "$VERSION" new -e "$ENVIRONMENT" --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" --version "$VERSION"

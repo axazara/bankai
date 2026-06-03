@@ -25,7 +25,7 @@ trait ConfigValidationTrait
         }
     }
 
-    private function getConfig(string $key): null|array|string
+    private function getConfig(string $key): mixed
     {
         return config($key);
     }
