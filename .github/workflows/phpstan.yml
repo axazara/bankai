@@ -3,6 +3,9 @@ name: PHPStan
 on:
   push:
 
+permissions:
+  contents: read
+
 jobs:
   phpstan:
     name: Run PHPStan on PHP ${{ matrix.php-version }}
