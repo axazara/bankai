@@ -35,6 +35,21 @@ final class BankaiInstall extends Command
         $this->info(string: 'Bankai Laravel Package setup successfully.');
     }
 
+    /**
+     * Publish the Envoy file.
+     */
+    public function publishEnvoyFile(): void
+    {
+        $envoyFile = app()->path() . '/../Envoy.blade.php';
+
+        if (! File::exists($envoyFile)) {
+            File::copy(
+                path: __DIR__ . '/Envoy.blade.exemple.php',
+                target: $envoyFile
+            );
+        }
+    }
+
     private function configExists(): bool
     {
         return File::exists(config_path(path: 'bankai.php'));
@@ -59,20 +74,5 @@ final class BankaiInstall extends Command
             $params['--force'] = true;
         }
         $this->call('vendor:publish', $params);
-    }
-
-    /**
-     * Publish the Envoy file.
-     */
-    public function publishEnvoyFile(): void
-    {
-        $envoyFile = app()->path() . '/../Envoy.blade.php';
-
-        if (! File::exists($envoyFile)) {
-            File::copy(
-                path: __DIR__ . '/Envoy.blade.exemple.php',
-                target: $envoyFile
-            );
-        }
     }
 }
