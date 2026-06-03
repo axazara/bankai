@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Laravel 12 and 13, in addition to 10 and 11.
 - A `run:before_deploy` lifecycle hook, executed before the new release is cloned.
 - Composer authentication support: a shared `auth.json` is symlinked into each release before `composer install`, during both `setup` and `deploy`.
+- `AxaZara\Bankai\Bankai::bootstrap()`, which reduces the project's `Envoy.blade.php` setup block to a single line instead of the full framework bootstrap boilerplate.
+- A test suite and a `Tests` CI workflow running it across PHP 8.1-8.4 and Laravel 10-13.
 - A `composer test` script.
 
 ### Changed
@@ -20,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rewrote the Envoy template for clarity: consistent use of the shared path variables, plain-text output (removed decorative emoji), and corrected typos (`Deloyment`, `rollack`).
 - Consolidated the two Slack notification helpers into a single `Slack` class that no-ops on an empty webhook.
 - Broadened the development dependencies (Testbench, Larastan, Collision, PHPUnit) so Composer resolves against current Laravel releases instead of EOL `laravel/framework` 9.x-dev.
+- `bankai:install` now resolves the Envoy file via `base_path()` and ships it from a `.stub` template; the published Envoy script uses the new `Bankai::bootstrap()` helper.
+- Quoted the repository URL and Sentry secrets in the shell tasks to avoid word-splitting.
 
 ### Fixed
 
@@ -33,3 +37,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - The duplicate `SlackNotification` class (superseded by `Slack`).
+- The `insolita/unused-scanner` dev dependency and the `composer unused` script: it capped `symfony/finder` at 6.x, which blocked Laravel 12 and 13.

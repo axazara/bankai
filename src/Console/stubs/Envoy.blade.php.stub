@@ -1,0 +1,27 @@
+@include('vendor/autoload.php')
+
+@setup
+    try {
+        extract(AxaZara\Bankai\Bankai::bootstrap($env));
+    } catch (Throwable $e) {
+        echo $e->getMessage();
+        exit(1);
+    }
+@endsetup
+
+@import('vendor/axazara/bankai/src/Envoy.blade.php')
+
+@task('run:before_deploy')
+    # Commands to run before the deployment starts (the new release is not cloned yet).
+    true
+@endtask
+
+@task('run:after_deploy')
+    cd "{{ $releasePath }}"
+    # Your post-build commands here, e.g. {{ $php }} artisan jwt:secret --force
+@endtask
+
+@task('run:after_rollback')
+    cd "{{ $currentReleasePath }}"
+    # Commands to run after a rollback.
+@endtask

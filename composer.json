@@ -22,7 +22,6 @@
     "require-dev": {
         "illuminate/contracts": "^10.0 || ^11.0 || ^12.0 || ^13.0",
         "axazara/php-cs": "^0.3",
-        "insolita/unused-scanner": "^2.4",
         "nunomaduro/collision": "^7.0 || ^8.0",
         "larastan/larastan": "^2.9 || ^3.0",
         "orchestra/testbench": "^8.0 || ^9.0 || ^10.0 || ^11.0",
@@ -39,14 +38,16 @@
         }
     },
     "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
     },
     "scripts": {
         "post-autoload-dump": "@php ./vendor/bin/testbench package:discover --ansi",
         "analyse": "vendor/bin/phpstan analyse",
         "test": "vendor/bin/phpunit",
         "sniff": "vendor/bin/php-cs-fixer fix -vvv --dry-run --show-progress=dots",
-        "format": "vendor/bin/php-cs-fixer fix -vv",
-        "unused": "vendor/bin/unused_scanner unused-scanner.php"
+        "format": "vendor/bin/php-cs-fixer fix -vv"
     },
     "config": {
         "sort-packages": true,
