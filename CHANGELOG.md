@@ -5,6 +5,13 @@ All notable changes to `axazara/bankai` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0](https://github.com/axazara/bankai/compare/v1.0.0...v1.1.0) (2026-06-03)
+
+
+### Features
+
+* add composer auth and before-deploy hook, fix config and Envoy template ([#12](https://github.com/axazara/bankai/issues/12)) ([ab20387](https://github.com/axazara/bankai/commit/ab203874ceafb7d7d061af56549249afef66e156))
+
 ## [Unreleased]
 
 ## [1.0.0] - 2026-06-03
