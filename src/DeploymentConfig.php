@@ -51,6 +51,7 @@ class DeploymentConfig
             'octaneReload'       => $environmentSettings['octane']['reload'],
             'octaneServer'       => $environmentSettings['octane']['server'],
             'horizonTerminate'   => $environmentSettings['horizon']['terminate'],
+            'date'               => date('Y-m-d H:i:s'),
             'release'            => $release,
             'releasePath'        => "{$path}/releases/{$release}",
             'releasesPath'       => "{$path}/releases",

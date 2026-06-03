@@ -2,9 +2,12 @@
 
 return [
     'settings' => [
-        'repository'         => 'your-repository',
-        'slack_webhook'      => 'https://hooks.slack.com/services/your-webhook',
-        'slack_channel'      => '#deployment',
+        // Git repository to deploy. Supports HTTPS and SSH URLs.
+        'repository_url'    => 'git@github.com:your-org/your-repository.git',
+
+        // Slack Incoming Webhook URL used to post deployment notifications.
+        // Leave null to disable Slack notifications.
+        'slack_webhook_url' => null,
     ],
 
     'sentry' => [
@@ -12,23 +15,24 @@ return [
         'organization'       => 'your-organization',
         'project'            => 'your-project',
         'token'              => 'your-token',
-        'version'            => null, // If null, the release will be the current release name, otherwise it will be the value of this key
+        // If null, the Sentry release name defaults to the current release; otherwise this value is used.
+        'version'            => null,
     ],
 
     'environments' => [
         'staging' => [
-            'ssh_host'               => 'your-host',
-            'ssh_user'               => 'your-user',
-            'url'                    => 'your-app-url-here',
-            'branch'                 => 'main',
-            'path'                   => '',
-            'php'                    => 'php',
-            'migration'              => false,
-            'seeder'                 => false,
-            'maintenance'            => false,
-            'composer'               => 'composer',
-            'composer_options'       => '',
-            'octane'                 => [
+            'ssh_host'         => 'your-host',
+            'ssh_user'         => 'your-user',
+            'url'              => 'https://staging.your-app.com',
+            'branch'           => 'main',
+            'path'             => '/var/www/your-app',
+            'php'              => 'php',
+            'composer'         => 'composer',
+            'composer_options' => '',
+            'migration'        => false,
+            'seeder'           => false,
+            'maintenance'      => false,
+            'octane'           => [
                 'install' => false,
                 'reload'  => false,
                 'server'  => 'swoole',
@@ -36,24 +40,24 @@ return [
             'horizon' => [
                 'terminate' => true,
             ],
-            'queue'                  => [
-                'restart'  => false,
+            'queue' => [
+                'restart' => false,
             ],
         ],
+
         'production' => [
-            'ssh_host'               => 'your-host',
-            'ssh_user'               => 'your-user',
-            'url'                    => 'your-app-url-here',
-            'branch'                 => 'main',
-            'path'                   => '',
-            'php'                    => 'php',
-            'migration'              => true,
-            'seeder'                 => false,
-            'maintenance'            => false,
-            'jwt_key_generate'       => true,
-            'composer'               => 'composer',
-            'composer_options'       => '--no-dev --verbose --prefer-dist --optimize-autoloader --no-progress --no-interaction',
-            'octane'                 => [
+            'ssh_host'         => 'your-host',
+            'ssh_user'         => 'your-user',
+            'url'              => 'https://your-app.com',
+            'branch'           => 'main',
+            'path'             => '/var/www/your-app',
+            'php'              => 'php',
+            'composer'         => 'composer',
+            'composer_options' => '--no-dev --prefer-dist --optimize-autoloader --no-progress --no-interaction',
+            'migration'        => true,
+            'seeder'           => false,
+            'maintenance'      => false,
+            'octane'           => [
                 'install' => false,
                 'reload'  => false,
                 'server'  => 'swoole',
@@ -61,8 +65,8 @@ return [
             'horizon' => [
                 'terminate' => true,
             ],
-            'queue'                  => [
-                'restart'  => false,
+            'queue' => [
+                'restart' => false,
             ],
         ],
     ],
