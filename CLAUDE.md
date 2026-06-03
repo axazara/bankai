@@ -9,11 +9,11 @@ Bankai is a Laravel Composer package (installed as a `--dev` dependency) that pr
 ## Tech stack
 
 - PHP ^8.1
-- Laravel Envoy ^2.0 (runtime dependency)
-- Laravel 9.x / 10.x / 11.x (host application; tested via Orchestra Testbench ^7.29)
-- PHPUnit ^9.6 / ^10.0 / ^11.0 (testing)
+- Laravel Envoy ^2.0 (the only runtime dependency)
+- Laravel 10.x / 11.x / 12.x / 13.x (host application; tested via Orchestra Testbench ^8 – ^11)
+- PHPUnit ^10.5 / ^11.0 (testing)
 - Larastan / PHPStan level 4 (static analysis)
-- axazara/php-cs-fixer (axazara/php-cs ^0.1) for code style
+- `axazara/php-cs` (^0.3) PHP CS Fixer rules for code style
 
 ## Getting started
 
@@ -35,35 +35,50 @@ php artisan bankai:install   # publishes config/bankai.php and Envoy.blade.php
 
 | Task | Command |
 |---|---|
+| Run tests | `composer test` |
 | Static analysis | `composer analyse` |
 | Check code style (dry-run) | `composer sniff` |
 | Fix code style | `composer format` |
-| Scan unused code | `composer unused` |
-| Run tests | `vendor/bin/phpunit` |
+
+To test against a specific Laravel line, constrain Testbench, e.g.:
+`composer update -W --with="orchestra/testbench:^11"` (Laravel 13).
 
 ## Architecture
 
 ```
 src/
-  Providers/BankaiServiceProvider.php   # Registers the package; publishes config + Envoy template
+  Bankai.php                            # bootstrap($env): boots Laravel and returns the deploy variables
+  DeploymentConfig.php                  # Builds + validates the deploy variables for a given env
+  Traits/ConfigValidationTrait.php      # Shared config validation helpers
+  Slack.php                             # Slack webhook notification helper
+  Providers/BankaiServiceProvider.php   # Registers the command; publishes config
   Console/BankaiInstall.php             # `php artisan bankai:install` command
-  DeploymentConfig.php                  # Loads and validates bankai.php config for a given env
-  Traits/ConfigValidationTrait.php      # Shared validation helpers for deployment config
-  Slack.php / SlackNotification.php     # Slack webhook notification helpers
+  Console/stubs/Envoy.blade.php.stub    # Stub copied to the host project's Envoy.blade.php
   Envoy.blade.php                       # Core Envoy tasks: setup, deploy, deploy:rollback, releases, backups
-  bankai.php                            # Default config stub published to host app
-config/                                 # (empty / mirrors src/bankai.php)
+config/bankai.php                       # Default config published to the host app
+tests/                                  # PHPUnit + Orchestra Testbench suite
 ```
 
-The deployment flow is entirely Envoy-driven: `setup` provisions release/shared/backup/current directories on the remote server; `deploy` clones the repo into a new timestamped release, links shared `.env`, runs Composer, optional migrations/seeders, switches the `current` symlink, then restarts Horizon/queues/Octane as configured; `deploy:rollback` reinstates the previous symlink.
+The deployment flow is entirely Envoy-driven: `setup` provisions the releases/shared/backups/current directories on the remote server; `deploy` clones the repo into a new timestamped release, optionally links `shared/auth.json` for Composer auth, links the shared `.env`, runs Composer, optional migrations/seeders, switches the `current` symlink, then restarts Horizon/queues/Octane as configured; `deploy:rollback` reinstates the previous symlink. Host projects keep their `Envoy.blade.php` to a single bootstrap line via `AxaZara\Bankai\Bankai::bootstrap($env)`.
 
 ## Conventions
 
 - Code style is enforced by `axazara/php-cs` (PHP CS Fixer rules); run `composer sniff` to check and `composer format` to auto-fix before committing.
 - Static analysis runs at PHPStan level 4 with Larastan; run `composer analyse` and fix all errors before opening a PR.
-- Tests live under `tests/` and use PHPUnit with Orchestra Testbench; the test suite is currently sparse.
+- Tests live under `tests/` and use PHPUnit with Orchestra Testbench. The `Tests` workflow runs them across PHP 8.1–8.4 and Laravel 10–13.
 - The package registers itself via Laravel's package auto-discovery (`extra.laravel.providers`); no manual registration is needed by consumers.
 - Supports multiple named deployment environments defined in `config/bankai.php`; environment name is passed at runtime via `--env={name}`.
+- All shell interpolations of config values in `Envoy.blade.php` should be quoted (e.g. `"{{ $repositoryUrl }}"`) to avoid word-splitting.
+
+## Release flow
+
+The repository follows a `develop` → `main` branching model with automated releases:
+
+- **`develop`** — integration branch; feature/fix branches are merged here first.
+- **`main`** — stable branch. Merging `develop` into `main` is what ships a release.
+- **Releases are automated with [release-please](https://github.com/googleapis/release-please).** On every push to `main`, the `Release` workflow opens (or updates) a release PR that bumps the version from the Conventional Commit history (`feat` → minor, `fix` → patch, `feat!`/`BREAKING CHANGE` → major) and updates `CHANGELOG.md`. Merging that release PR creates the `v*` tag and the GitHub release.
+- Version state lives in `.release-please-manifest.json`; configuration in `release-please-config.json`.
+- Because versions are derived from commit history, **Conventional Commit messages are required** (already enforced by the `commit_message_pattern` ruleset).
 
 ## Git Conventions
 
