@@ -18,11 +18,18 @@
 
 @import('vendor/axazara/bankai/src/Envoy.blade.php');
 
+@task("run:before_deploy")
+    # Commands to run before the deployment starts (the new release is not cloned yet).
+    # Useful for pre-flight checks or notifications.
+    true
+@endtask
+
 @task("run:after_deploy")
     cd "{{ $releasePath }}"
-    # Here you can add your own commands to run after deploy
+    # Commands to run after the new release is built but before it goes live.
 @endtask
 
 @task("run:after_rollback")
-    cd "{{ $currentRelease }}"
+    cd "{{ $currentReleasePath }}"
+    # Commands to run after a rollback.
 @endtask

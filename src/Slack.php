@@ -4,23 +4,25 @@ namespace AxaZara\Bankai;
 
 class Slack
 {
-    public static function send(
-        string $message,
-        string $webhookUrl
-    ): void {
-        $data = [
-            'text' => $message,
-        ];
+    /**
+     * Post a message to a Slack Incoming Webhook.
+     *
+     * Does nothing when no webhook URL is provided, so callers can pass an
+     * optional/disabled webhook without guarding it themselves.
+     */
+    public static function send(string $message, ?string $webhookUrl): void
+    {
+        if (empty($webhookUrl)) {
+            return;
+        }
 
-        $options = [
+        $context = stream_context_create([
             'http' => [
-                'header'  => "Content-type: application/json\r\n",
                 'method'  => 'POST',
-                'content' => json_encode($data, JSON_THROW_ON_ERROR),
+                'header'  => "Content-Type: application/json\r\n",
+                'content' => json_encode(['text' => $message], JSON_THROW_ON_ERROR),
             ],
-        ];
-
-        $context = stream_context_create($options);
+        ]);
 
         file_get_contents(
             filename: $webhookUrl,

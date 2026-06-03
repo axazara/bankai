@@ -6,19 +6,22 @@ use Illuminate\Support\Facades\Validator;
 
 trait ConfigValidationTrait
 {
-    protected function validateConfiguration($environment): void
+    protected function validateConfiguration(string $environment): void
     {
+        if (! is_array($this->getConfig("bankai.environments.{$environment}"))) {
+            throw new \RuntimeException("Unknown deployment environment: '{$environment}'. Define it under 'environments' in config/bankai.php.");
+        }
+
         $configurations = [
-            "bankai.environments.$environment"=> $this->getEnvironmentRules(),
-            'bankai.settings'                 => $this->getSettingsRules(),
-            'bankai.sentry'                   => config('bankai.sentry.enabled')
+            "bankai.environments.{$environment}" => $this->getEnvironmentRules(),
+            'bankai.settings'                    => $this->getSettingsRules(),
+            'bankai.sentry'                      => config('bankai.sentry.enabled')
                 ? $this->getSentryRules()
                 : [],
         ];
 
         foreach ($configurations as $configKey => $rules) {
-            $config = $this->getConfig($configKey);
-            $this->validate($config, $rules);
+            $this->validate((array) $this->getConfig($configKey), $rules);
         }
     }
 
@@ -53,7 +56,7 @@ trait ConfigValidationTrait
             'maintenance'       => 'required|boolean',
             'octane.install'    => 'required|boolean',
             'octane.reload'     => 'required|boolean',
-            'octane.server'     => 'required|in:roadrunner,swoole,frankenphp,openswoole,frankenphp',
+            'octane.server'     => 'required|in:roadrunner,swoole,frankenphp,openswoole',
             'horizon.terminate' => 'required|boolean',
         ];
     }

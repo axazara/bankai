@@ -1,6 +1,35 @@
 # Changelog
 
-All notable changes to `axazara-bnakai` will be documented in this file.
+All notable changes to `axazara/bankai` are documented in this file.
 
-## 1.0.0 - 2023-11-22
-  - Initial release
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- Support for Laravel 12 and 13, in addition to 10 and 11.
+- A `run:before_deploy` lifecycle hook, executed before the new release is cloned.
+- Composer authentication support: a shared `auth.json` is symlinked into each release before `composer install`, during both `setup` and `deploy`.
+- A `composer test` script.
+
+### Changed
+
+- Aligned the published configuration keys with the code: `settings.repository_url` and `settings.slack_webhook_url` (previously `repository` / `slack_webhook`). This fixes configuration validation failing on a fresh install.
+- Rewrote the Envoy template for clarity: consistent use of the shared path variables, plain-text output (removed decorative emoji), and corrected typos (`Deloyment`, `rollack`).
+- Consolidated the two Slack notification helpers into a single `Slack` class that no-ops on an empty webhook.
+- Broadened the development dependencies (Testbench, Larastan, Collision, PHPUnit) so Composer resolves against current Laravel releases instead of EOL `laravel/framework` 9.x-dev.
+
+### Fixed
+
+- Configuration validation now raises a clear error for an unknown deployment environment instead of a type error.
+- `DeploymentConfig` exposes a `date` variable used by the notification messages.
+- Corrected undefined variables in the Envoy template (`$sshHost`, `$currentReleasePath`, `$date`).
+- Removed the dead `octaneIsRunning()` helper, the duplicate `make:run_migrations` and unused `make:clear_cache` / `deploy:durations` tasks.
+- Standardised the backups directory name to `backups`.
+- Removed a duplicate `frankenphp` entry from the Octane server validation rule.
+
+### Removed
+
+- The duplicate `SlackNotification` class (superseded by `Slack`).
