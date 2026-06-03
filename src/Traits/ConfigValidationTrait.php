@@ -22,7 +22,7 @@ trait ConfigValidationTrait
         }
     }
 
-    private function getConfig(string $key): string|null|array
+    private function getConfig(string $key): null|array|string
     {
         return config($key);
     }
