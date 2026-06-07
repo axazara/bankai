@@ -5,6 +5,13 @@ All notable changes to `axazara/bankai` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1](https://github.com/axazara/bankai/compare/v1.0.0...v1.0.1) (2026-06-07)
+
+
+### Bug Fixes
+
+* **envoy:** write [@error](https://github.com/error) handler body as raw PHP to avoid nested tag ([#16](https://github.com/axazara/bankai/issues/16)) ([684826f](https://github.com/axazara/bankai/commit/684826f08f9175e44c5dbee15920d6d7417585ba))
+
 ## [Unreleased]
 
 ## [1.0.0] - 2026-06-03
