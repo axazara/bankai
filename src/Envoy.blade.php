@@ -496,11 +496,9 @@
 @endsuccess
 
 @error
-   @php
-       if (empty($failureMessage)) {
-           $failureMessage = "Task $task failed on the $env environment on $appName. Error message: $error";
-       }
-   @endphp
+   if (empty($failureMessage)) {
+       $failureMessage = "Task $task failed on the $env environment on $appName. Error message: $error";
+   }
 
    @slack($slackWebhookUrl, '', $failureMessage)
 
