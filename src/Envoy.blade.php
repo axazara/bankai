@@ -329,8 +329,15 @@
    echo "Switching the current release"
 
    if [ -e "{{ $currentReleasePath }}" ] && [ ! -L "{{ $currentReleasePath }}" ]; then
-       echo "{{ $currentReleasePath }} exists and is not a symlink; refusing to replace it."
-       exit 1
+       # Server provisioning (e.g. Laravel Forge) often leaves an empty 'current'
+       # directory behind. rmdir only ever removes an empty directory, so a real
+       # deployment can never be deleted here.
+       if rmdir "{{ $currentReleasePath }}" 2>/dev/null; then
+           echo "Removed the empty 'current' directory left over from server provisioning"
+       else
+           echo "{{ $currentReleasePath }} exists, is not a symlink and is not empty; refusing to replace it."
+           exit 1
+       fi
    fi
 
    # Atomic switch: build the symlink aside, then rename over the live one.

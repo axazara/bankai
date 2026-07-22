@@ -131,6 +131,19 @@ final class EnvoyTemplateLoadTest extends BaseTestCase
         $this->assertStringContainsString('mv -Tf', $script);
     }
 
+    public function test_an_empty_current_directory_is_removed_with_rmdir_only(): void
+    {
+        $container = $this->loadedContainer('clone');
+
+        $script = $container->getTask('make:link_current_release')->script;
+
+        // rmdir fails on non-empty directories, so a real deployment can never
+        // be deleted; anything non-empty must still abort the deploy.
+        $this->assertStringContainsString('rmdir', $script);
+        $this->assertStringNotContainsString('rm -rf "{{ $currentReleasePath }}"', $script);
+        $this->assertStringContainsString('refusing to replace it', $script);
+    }
+
     public function test_the_template_registers_the_artifact_build_hook(): void
     {
         $container = $this->loadedContainer('artifact');
