@@ -2,6 +2,7 @@
 
 namespace AxaZara\Bankai\Providers;
 
+use AxaZara\Bankai\Console\BankaiArtifact;
 use AxaZara\Bankai\Console\BankaiInstall;
 use Illuminate\Support\ServiceProvider;
 
@@ -12,6 +13,7 @@ class BankaiServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands(commands: [
                 BankaiInstall::class,
+                BankaiArtifact::class,
             ]);
 
             $this->publishes([

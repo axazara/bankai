@@ -37,15 +37,21 @@ Customize `config/bankai.php` according to your project's needs.
 return [
     // General deployment settings
     'settings' => [
-        // Git repository to deploy (HTTPS or SSH URL)
+        // Git repository to deploy (clone strategy only). Use an SSH URL with a
+        // read-only deploy key. HTTPS URLs with embedded credentials are rejected;
+        // CI can inject an ephemeral token-bearing URL through the
+        // BANKAI_REPOSITORY_URL environment variable instead.
         'repository_url'    => 'git@github.com:your-org/your-repository.git',
         // Slack Incoming Webhook URL; leave null to disable notifications
-        'slack_webhook_url' => null,
+        'slack_webhook_url' => env('BANKAI_SLACK_WEBHOOK_URL'),
+        // How many releases to keep on the server (the live one included)
+        'releases_to_keep'  => 3,
     ],
 
     // Define your environments, e.g. staging and production
     'environments' => [
         'staging' => [
+            'strategy'         => 'artifact',        // 'artifact' or 'clone', see below
             'ssh_host'         => 'your-host',       // SSH host of the server
             'ssh_user'         => 'your-user',       // SSH user used for deployment
             'url'              => 'https://staging.your-app.com', // Application URL
@@ -106,6 +112,43 @@ return [
     cd "{{ $currentReleasePath }}"
 @endtask
 ```
+
+## Deployment strategies
+
+Bankai supports two ways of getting a release onto the server, selected per
+environment with the `strategy` key.
+
+### `artifact` (recommended)
+
+CI builds the release and uploads a tarball; the server only extracts it. The
+server needs **no Git access, no Composer authentication and no GitHub or
+registry credentials**, and what was tested in CI is exactly what ships.
+
+The contract: upload the tarball to `{path}/artifacts/incoming.tar.gz`, then run
+the deploy. Bankai consumes (deletes) the artifact after extraction.
+
+```shell
+# In CI, after composer install --no-dev and the asset build:
+php artisan bankai:artifact                    # creates release.tar.gz
+scp release.tar.gz user@host:{path}/artifacts/incoming.tar.gz
+vendor/bin/envoy run deploy --env=production
+```
+
+`bankai:artifact` packages the working directory and always excludes `.git`,
+`.github`, `node_modules`, `tests`, `storage`, `.env*` and `auth.json`.
+
+### `clone` (default)
+
+The historical flow: the server clones the repository and runs
+`composer install` itself. Requires:
+
+- an SSH `repository_url` with a **read-only deploy key** installed on the server;
+- a `shared/auth.json` on the server when private Composer packages are used.
+
+For a temporary token-based clone (for example a GitHub App installation token
+minted in CI), set the `BANKAI_REPOSITORY_URL` environment variable on the
+machine running Envoy; it takes precedence over the configured URL and is never
+stored on the server.
 
 ## Deployment
 
@@ -197,24 +240,34 @@ The following variables are available in your tasks:
 
 ## Rollback
 
-Quickly revert to the previous release:
+Quickly revert to the previous release (atomic symlink switch, no maintenance window):
 
 ```shell
 vendor/bin/envoy run deploy:rollback --env={your-environment}
 ```
 
+## Deployment lock
+
+Each deploy takes a lock on the server so two deployments can never interleave.
+If a deployment crashes and leaves the lock behind, release it with:
+
+```shell
+vendor/bin/envoy run deploy:unlock --env={your-environment}
+```
+
 ## Additional commands
 
-- List releases: `vendor/bin/envoy run releases --env={your-environment}`
+- Build a release artifact: `php artisan bankai:artifact`
+- List releases (the live one is marked): `vendor/bin/envoy run releases --env={your-environment}`
 - List backups: `vendor/bin/envoy run backups --env={your-environment}`
 
 ## Zero-downtime deployment mechanics
 
-1. **New release preparation**: Bankai creates a new release in the `releases/` directory.
-2. **Symlink switching**: The `current` symlink is switched atomically to the new release.
-3. **Shared resources**: Consistency across deployments is maintained via the shared directory and files.
-4. **Rollbacks**: Revert to a previous release at any time.
-5. **Cleanup**: Old releases are pruned, keeping the three most recent.
+1. **New release preparation**: Bankai creates a new release in the `releases/` directory (cloned or extracted from the artifact).
+2. **Cache warm-up**: The new release is optimised before going live; the live release's caches and the shared application cache store are never touched.
+3. **Symlink switching**: The `current` symlink is switched atomically to the new release (`ln + rename`).
+4. **Health check**: The application URL is polled (5 attempts) while the previous release is still on disk, so a failing release can be rolled back instantly.
+5. **Cleanup**: Old releases are pruned, keeping the live release and the most recent others (`releases_to_keep`, default 3).
 
 ## Sentry integration
 

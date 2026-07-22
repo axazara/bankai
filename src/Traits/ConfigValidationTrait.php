@@ -42,6 +42,7 @@ trait ConfigValidationTrait
     private function getEnvironmentRules(): array
     {
         return [
+            'strategy'          => 'sometimes|string|in:clone,artifact',
             'branch'            => 'required|string',
             'ssh_host'          => 'required|string',
             'ssh_user'          => 'required|string',
@@ -64,8 +65,9 @@ trait ConfigValidationTrait
     private function getSettingsRules(): array
     {
         return [
-            'repository_url'    => ['required', 'string'],
+            'repository_url'    => 'nullable|string',
             'slack_webhook_url' => 'nullable|url',
+            'releases_to_keep'  => 'sometimes|integer|min:1',
         ];
     }
 
