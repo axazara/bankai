@@ -3,15 +3,36 @@
 namespace AxaZara\Bankai;
 
 use AxaZara\Bankai\Traits\ConfigValidationTrait;
+use Illuminate\Support\Env;
 
 class DeploymentConfig
 {
     use ConfigValidationTrait;
 
+    public const STRATEGY_CLONE = 'clone';
+
+    public const STRATEGY_ARTIFACT = 'artifact';
+
+    public const DEFAULT_RELEASES_TO_KEEP = 3;
+
+    private readonly string $strategy;
+
+    private readonly ?string $repositoryUrl;
+
     public function __construct(
         public readonly string $env
     ) {
         $this->validateConfiguration(environment: $env);
+
+        $this->strategy = $this->getConfig("bankai.environments.{$env}.strategy") ?? self::STRATEGY_CLONE;
+        $this->repositoryUrl = $this->resolveRepositoryUrl();
+
+        if ($this->strategy === self::STRATEGY_CLONE && ($this->repositoryUrl === null || $this->repositoryUrl === '')) {
+            throw new \RuntimeException(
+                "The '{$env}' environment uses the 'clone' strategy but no repository URL is configured. " .
+                "Set 'bankai.settings.repository_url' or the BANKAI_REPOSITORY_URL environment variable."
+            );
+        }
     }
 
     public function extractVariables(): array
@@ -32,7 +53,8 @@ class DeploymentConfig
         string $release
     ): array {
         return [
-            'repositoryUrl'      => $this->getConfig('bankai.settings.repository_url'),
+            'strategy'           => $this->strategy,
+            'repositoryUrl'      => $this->repositoryUrl,
             'slackWebhookUrl'    => $this->getConfig('bankai.settings.slack_webhook_url'),
             'appName'            => config('app.name'),
             'branch'             => $environmentSettings['branch'],
@@ -51,6 +73,7 @@ class DeploymentConfig
             'octaneReload'       => $environmentSettings['octane']['reload'],
             'octaneServer'       => $environmentSettings['octane']['server'],
             'horizonTerminate'   => $environmentSettings['horizon']['terminate'],
+            'releasesToKeep'     => $this->resolveReleasesToKeep(),
             'date'               => date('Y-m-d H:i:s'),
             'release'            => $release,
             'releasePath'        => "{$path}/releases/{$release}",
@@ -58,7 +81,48 @@ class DeploymentConfig
             'sharedPath'         => "{$path}/shared",
             'backupPath'         => "{$path}/backups",
             'currentReleasePath' => "{$path}/current",
+            'artifactsPath'      => "{$path}/artifacts",
+            'artifactPath'       => "{$path}/artifacts/incoming.tar.gz",
+            'deployLockPath'     => "{$path}/.bankai-deploy.lock",
         ];
+    }
+
+    /**
+     * Resolve the repository URL, preferring the BANKAI_REPOSITORY_URL
+     * environment variable so CI can inject an ephemeral, token-bearing URL
+     * (for example a GitHub App installation token) without persisting it.
+     *
+     * A credential embedded in the committed configuration is rejected: HTTP(S)
+     * URLs with a userinfo segment leak secrets into version control and logs.
+     */
+    private function resolveRepositoryUrl(): ?string
+    {
+        $override = Env::get('BANKAI_REPOSITORY_URL');
+
+        if (is_string($override) && $override !== '') {
+            return $override;
+        }
+
+        $configured = $this->getConfig('bankai.settings.repository_url');
+
+        if (is_string($configured) && preg_match('#^https?://[^/@]+@#i', $configured) === 1) {
+            throw new \RuntimeException(
+                'bankai.settings.repository_url must not embed credentials. ' .
+                'Use an SSH deploy key (git@github.com:org/repo.git) or inject an ephemeral ' .
+                'token-bearing URL through the BANKAI_REPOSITORY_URL environment variable.'
+            );
+        }
+
+        return $configured;
+    }
+
+    private function resolveReleasesToKeep(): int
+    {
+        $configured = $this->getConfig('bankai.settings.releases_to_keep');
+
+        return is_numeric($configured) && (int) $configured >= 1
+            ? (int) $configured
+            : self::DEFAULT_RELEASES_TO_KEEP;
     }
 
     private function getSentryVariables(string $release): array

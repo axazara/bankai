@@ -2,12 +2,18 @@
 
 return [
     'settings' => [
-        // Git repository to deploy. Supports HTTPS and SSH URLs.
+        // Git repository to deploy (clone strategy only). Use an SSH URL with a
+        // read-only deploy key; HTTPS URLs with embedded credentials are rejected.
+        // CI can override this at run time via the BANKAI_REPOSITORY_URL
+        // environment variable (for example with an ephemeral GitHub App token).
         'repository_url'    => 'git@github.com:your-org/your-repository.git',
 
         // Slack Incoming Webhook URL used to post deployment notifications.
         // Leave null to disable Slack notifications.
-        'slack_webhook_url' => null,
+        'slack_webhook_url' => env('BANKAI_SLACK_WEBHOOK_URL'),
+
+        // How many releases to keep on the server (the live one included).
+        'releases_to_keep'  => 3,
     ],
 
     'sentry' => [
@@ -21,6 +27,10 @@ return [
 
     'environments' => [
         'staging' => [
+            // How the release lands on the server:
+            // - 'artifact': CI builds and uploads a tarball; the server needs no Git or Composer access.
+            // - 'clone': the server clones the repository and installs dependencies itself.
+            'strategy'         => 'artifact',
             'ssh_host'         => 'your-host',
             'ssh_user'         => 'your-user',
             'url'              => 'https://staging.your-app.com',
@@ -46,6 +56,7 @@ return [
         ],
 
         'production' => [
+            'strategy'         => 'artifact',
             'ssh_host'         => 'your-host',
             'ssh_user'         => 'your-user',
             'url'              => 'https://your-app.com',

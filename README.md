@@ -37,15 +37,21 @@ Customize `config/bankai.php` according to your project's needs.
 return [
     // General deployment settings
     'settings' => [
-        // Git repository to deploy (HTTPS or SSH URL)
+        // Git repository to deploy (clone strategy only). Use an SSH URL with a
+        // read-only deploy key. HTTPS URLs with embedded credentials are rejected;
+        // CI can inject an ephemeral token-bearing URL through the
+        // BANKAI_REPOSITORY_URL environment variable instead.
         'repository_url'    => 'git@github.com:your-org/your-repository.git',
         // Slack Incoming Webhook URL; leave null to disable notifications
-        'slack_webhook_url' => null,
+        'slack_webhook_url' => env('BANKAI_SLACK_WEBHOOK_URL'),
+        // How many releases to keep on the server (the live one included)
+        'releases_to_keep'  => 3,
     ],
 
     // Define your environments, e.g. staging and production
     'environments' => [
         'staging' => [
+            'strategy'         => 'artifact',        // 'artifact' or 'clone', see below
             'ssh_host'         => 'your-host',       // SSH host of the server
             'ssh_user'         => 'your-user',       // SSH user used for deployment
             'url'              => 'https://staging.your-app.com', // Application URL
@@ -107,6 +113,48 @@ return [
 @endtask
 ```
 
+## Deployment strategies
+
+Bankai supports two ways of getting a release onto the server, selected per
+environment with the `strategy` key.
+
+### `artifact` (recommended)
+
+The machine running Envoy (CI or your laptop) builds the release and uploads a
+tarball; the server only extracts it. The server needs **no Git access, no
+Composer authentication and no GitHub or registry credentials**, and what was
+tested in CI is exactly what ships.
+
+Everything happens inside one command:
+
+```shell
+vendor/bin/envoy run deploy --env=production
+```
+
+Right before extraction, Bankai copies the project to a temporary build
+directory (excluding `.git`, `.github`, `node_modules`, `tests`, `storage`,
+`.env*`, `auth.json` and the local `vendor`), runs
+`composer install --no-dev --optimize-autoloader`, builds front-end assets when
+a `package.json` with a `build` script is present, packs the tarball, uploads
+it to `{path}/artifacts/incoming.tar.gz` over SSH, and the server consumes
+(deletes) it after extraction. Your working directory is never modified.
+
+`php artisan bankai:artifact` is also available to package the working
+directory as-is (same exclusions), for inspection or manual distribution.
+
+### `clone` (default)
+
+The historical flow: the server clones the repository and runs
+`composer install` itself. Requires:
+
+- an SSH `repository_url` with a **read-only deploy key** installed on the server;
+- a `shared/auth.json` on the server when private Composer packages are used.
+
+For a temporary token-based clone (for example a GitHub App installation token
+minted in CI), set the `BANKAI_REPOSITORY_URL` environment variable on the
+machine running Envoy; it takes precedence over the configured URL and is never
+stored on the server.
+
 ## Deployment
 
 The first deployment follows five steps. Once set up, day-to-day deployments are just Step 4.
@@ -139,6 +187,9 @@ Edit the shared environment file created during setup. Every release symlinks to
 ```
 
 ### Step 3 — Configure Composer authentication
+
+**Clone strategy only.** With the `artifact` strategy the server never runs
+Composer, so no credentials are needed there — skip this step entirely.
 
 Required only if your application pulls **private** Composer packages or registries. Add an `auth.json` file to the shared directory:
 
@@ -197,24 +248,42 @@ The following variables are available in your tasks:
 
 ## Rollback
 
-Quickly revert to the previous release:
+Quickly revert to the previous release (atomic symlink switch, no maintenance window):
 
 ```shell
 vendor/bin/envoy run deploy:rollback --env={your-environment}
 ```
 
+## Deployment lock
+
+At the start of every deploy, Bankai atomically creates a lock directory on the
+server (`{path}/.bankai-deploy.lock`). If the lock already exists, the deploy
+aborts immediately with the timestamp of the run holding it. This guarantees two
+deployments can never interleave: without it, two concurrent runs would race on
+`incoming.tar.gz`, migrations and the `current` symlink.
+
+The lock is released at the end of a successful deploy. It is deliberately
+**not** released on failure, because a half-finished deploy left the server in
+a state that deserves a human look. Once you have checked (and rolled back if
+needed), release it with:
+
+```shell
+vendor/bin/envoy run deploy:unlock --env={your-environment}
+```
+
 ## Additional commands
 
-- List releases: `vendor/bin/envoy run releases --env={your-environment}`
+- Build a release artifact: `php artisan bankai:artifact`
+- List releases (the live one is marked): `vendor/bin/envoy run releases --env={your-environment}`
 - List backups: `vendor/bin/envoy run backups --env={your-environment}`
 
 ## Zero-downtime deployment mechanics
 
-1. **New release preparation**: Bankai creates a new release in the `releases/` directory.
-2. **Symlink switching**: The `current` symlink is switched atomically to the new release.
-3. **Shared resources**: Consistency across deployments is maintained via the shared directory and files.
-4. **Rollbacks**: Revert to a previous release at any time.
-5. **Cleanup**: Old releases are pruned, keeping the three most recent.
+1. **New release preparation**: Bankai creates a new release in the `releases/` directory (cloned or extracted from the artifact).
+2. **Cache warm-up**: The new release is optimised before going live; the live release's caches and the shared application cache store are never touched.
+3. **Symlink switching**: The `current` symlink is switched atomically to the new release (`ln + rename`).
+4. **Health check**: The application URL is polled (5 attempts) while the previous release is still on disk, so a failing release can be rolled back instantly.
+5. **Cleanup**: Old releases are pruned, keeping the live release and the most recent others (`releases_to_keep`, default 3).
 
 ## Sentry integration
 

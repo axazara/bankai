@@ -3,10 +3,10 @@
         *Deployment completed on $appName*
         - App name: $appName
         - Environment: $env
+        - Strategy: $strategy
         - URL: $appUrl
         - Deployment path: $path
         - Current release: $release
-        - Repository: $repositoryUrl
         - Branch: $branch
         - SSH host: $sshHost
         - Date: $date
@@ -14,15 +14,31 @@
 
     $rollbackSuccessMessage = "*$appName* has been rolled back to the previous release.";
 
-    $failureMessage = null;
+    // Slack payloads are JSON-encoded and shell-quoted up front so app names or
+    // messages containing quotes can never break the curl command or the JSON body.
+    $deploymentSuccessPayload = escapeshellarg(json_encode(['text' => $deploymentSuccess]));
+    $rollbackSuccessPayload = escapeshellarg(json_encode(['text' => $rollbackSuccessMessage]));
 @endsetup
 
 @servers([$env => "{$sshUser}@{$sshHost}"])
 
+@before
+    // Artifact strategy: build the release on this machine and upload it right
+    // before the server extracts it, so `envoy run deploy` is self-contained.
+    if ($task === 'make:extract_artifact' && $strategy === 'artifact') {
+        try {
+            AxaZara\Bankai\ArtifactBuilder::buildAndUpload(getcwd(), $sshUser, $sshHost, $artifactPath);
+        } catch (Throwable $e) {
+            echo 'Artifact build failed: ' . $e->getMessage() . "\n";
+            exit(1);
+        }
+    }
+@endbefore
+
 @story('setup' , ['on' => $env])
-    set:setup_failure_message
     setup:directories
     make:clone_repository
+    make:extract_artifact
     make:link_composer_auth
     make:install_composer_dependencies
     setup:common_files
@@ -33,14 +49,15 @@
 @endstory
 
 @story('deploy' , ['on' => $env])
-    set:deploy_failure_message
     display_info
     check_if_release_exists
+    deploy:acquire_lock
     run:before_deploy
     make:clone_repository
+    make:extract_artifact
     make:link_composer_auth
     make:install_composer_dependencies
-    make:npm_install
+    make:build_assets
     make:symlinks
     make:app_down
     make:migration
@@ -53,8 +70,9 @@
     make:restart_queue
     make:horizon:terminate
     make:reload_octane
-    make:clean_old_release
     make:check_app_health
+    make:clean_old_release
+    deploy:release_lock
     sentry:release
     deploy:complete
 @endstory
@@ -63,6 +81,10 @@
     make:rollback
     run:after_rollback
     rollback:complete
+@endstory
+
+@story('deploy:unlock', ['on' => $env])
+    deploy:force_unlock
 @endstory
 
 @story('backups')
@@ -75,174 +97,259 @@
 
 @task('display_info')
     echo "Deployment information:";
+    echo "- Strategy: {{ $strategy }}";
     echo "- Deployment path: {{ $releasePath }}";
     echo "- Current release: {{ $release }}";
     echo "- Releases path: {{ $releasesPath }}";
     echo "- Shared path: {{ $sharedPath }}";
-    echo "- Repository: {{ $repositoryUrl }}";
-    echo "- Branch: {{ $branch }}";
+    @if ($strategy === 'clone')
+        echo "- Repository: {{ $repositoryUrl }}";
+        echo "- Branch: {{ $branch }}";
+    @else
+        echo "- Artifact: {{ $artifactPath }}";
+    @endif
     echo "- URL: {{ $appUrl }}";
     echo "- Environment: {{ $env }}";
-    echo "- Backup path: {{ $backupPath }}";
-@endtask
-
-@task('set:deploy_failure_message')
-    @php
-        $failureMessage = "
-            *Deployment failed on $appName*
-            - App name: $appName
-            - Environment: $env
-            - Deployment path: $path
-            - Repository: $repositoryUrl
-            - Branch: $branch
-            - SSH host: $sshHost
-            - Date: $date
-        ";
-    @endphp
-
-    true
-@endtask
-
-@task('set:setup_failure_message')
-    @php
-        $failureMessage = "
-            *Project setup failed on $appName*
-            - App name: $appName
-            - Environment: $env
-            - Deployment path: $path
-            - Repository: $repositoryUrl
-            - Branch: $branch
-            - SSH host: $sshHost
-            - Date: $date
-        ";
-    @endphp
-
-    true
+    echo "- Releases kept: {{ $releasesToKeep }}";
 @endtask
 
 @task('setup:directories')
-   # Abort if the release directory already exists to avoid overwriting an existing deployment.
-   if [ -d {{ $releasesPath }} ]; then
-       echo "Release directory already exists on the server. Run 'envoy run deploy' to deploy your application.";
-       echo "If you think this is an error, clean up the deployment folder manually and try again.";
-       exit 1;
+   set -euo pipefail
+
+   # Refuse to run twice: an existing release means the server is already set up.
+   if [ -d "{{ $releasesPath }}" ] && [ -n "$(ls -A "{{ $releasesPath }}" 2>/dev/null)" ]; then
+       echo "Releases already exist on this server. Run 'envoy run deploy' to deploy your application."
+       echo "If you think this is an error, clean up the deployment folder manually and try again."
+       exit 1
    fi
 
-   echo "Creating deployment directories";
+   echo "Creating deployment directories"
 
    mkdir -p "{{ $releasesPath }}"
    mkdir -p "{{ $sharedPath }}"
    mkdir -p "{{ $backupPath }}"
+   mkdir -p "{{ $artifactsPath }}"
 
-   echo "Deployment directories created";
+   echo "Deployment directories created"
+@endtask
+
+@task('deploy:acquire_lock')
+   mkdir -p "{{ $artifactsPath }}"
+
+   # mkdir is atomic: it either creates the lock or fails because one exists.
+   if mkdir "{{ $deployLockPath }}" 2>/dev/null; then
+       date '+%Y-%m-%d %H:%M:%S' > "{{ $deployLockPath }}/started_at"
+       echo "Deployment lock acquired"
+   else
+       echo "Another deployment appears to be in progress since $(cat "{{ $deployLockPath }}/started_at" 2>/dev/null || echo 'unknown')."
+       echo "If that deployment crashed, release the lock with: envoy run deploy:unlock --env={{ $env }}"
+       exit 1
+   fi
+@endtask
+
+@task('deploy:release_lock')
+   rm -rf "{{ $deployLockPath }}"
+   echo "Deployment lock released"
+@endtask
+
+@task('deploy:force_unlock')
+   if [ -d "{{ $deployLockPath }}" ]; then
+       rm -rf "{{ $deployLockPath }}"
+       echo "Deployment lock forcibly released"
+   else
+       echo "No deployment lock found, nothing to do"
+   fi
 @endtask
 
 @task('make:clone_repository')
-   echo "Cloning repository";
+   @if ($strategy === 'clone')
+       set -euo pipefail
 
-   cd {{ $releasesPath }}
-   git clone "{{ $repositoryUrl }}" --branch="{{ $branch }}" --depth=1 -q "{{ $release }}"
-   echo "Repository cloned";
+       echo "Cloning repository ({{ $branch }})"
+
+       cd "{{ $releasesPath }}"
+       git clone "{{ $repositoryUrl }}" --branch="{{ $branch }}" --depth=1 --single-branch -q "{{ $release }}"
+
+       echo "Repository cloned"
+   @else
+       echo "Repository clone skipped (artifact strategy)"
+   @endif
+@endtask
+
+@task('make:extract_artifact')
+   @if ($strategy === 'artifact')
+       set -euo pipefail
+
+       if [ ! -s "{{ $artifactPath }}" ]; then
+           echo "No artifact found at {{ $artifactPath }}; the build-and-upload step did not run or failed."
+           exit 1
+       fi
+
+       echo "Extracting artifact into the new release"
+
+       mkdir -p "{{ $releasePath }}"
+       tar -xzf "{{ $artifactPath }}" -C "{{ $releasePath }}"
+       rm -f "{{ $artifactPath }}"
+
+       echo "Artifact extracted and consumed"
+   @else
+       echo "Artifact extraction skipped (clone strategy)"
+   @endif
 @endtask
 
 @task('make:link_composer_auth')
-   # Symlink a shared auth.json (if present) so Composer can authenticate against
-   # private registries and repositories during installation.
-   if [ -f {{ $sharedPath }}/auth.json ]; then
-       ln -sf {{ $sharedPath }}/auth.json {{ $releasePath }}/auth.json
-       echo "Composer auth.json linked from the shared directory";
-   else
-       echo "No shared auth.json found, skipping Composer authentication setup";
-   fi
+   @if ($strategy === 'clone')
+       # Symlink a shared auth.json (if present) so Composer can authenticate against
+       # private registries and repositories during installation.
+       if [ -f "{{ $sharedPath }}/auth.json" ]; then
+           ln -sf "{{ $sharedPath }}/auth.json" "{{ $releasePath }}/auth.json"
+           echo "Composer auth.json linked from the shared directory"
+       else
+           echo "No shared auth.json found, skipping Composer authentication setup"
+       fi
+   @else
+       echo "Composer auth skipped (artifact ships its vendor directory)"
+   @endif
 @endtask
 
 @task('make:install_composer_dependencies')
-   echo "Installing Composer dependencies";
+   @if ($strategy === 'clone')
+       set -euo pipefail
 
-   cd {{ $releasePath }}
-   {{ $composer }} install {{ $composerOptions }} --no-progress
+       echo "Installing Composer dependencies"
 
-   echo "Composer dependencies installed";
+       cd "{{ $releasePath }}"
+       {{ $composer }} install {{ $composerOptions }} --no-progress
+
+       echo "Composer dependencies installed"
+   @else
+       echo "Composer install skipped (artifact ships its vendor directory)"
+   @endif
 @endtask
 
-@task('make:npm_install')
-   cd {{ $releasePath }}
+@task('make:build_assets')
+   @if ($strategy === 'clone')
+       set -euo pipefail
 
-   if [ -f "package.json" ]; then
-       echo "Running npm install"
+       cd "{{ $releasePath }}"
 
-       if [ -f "yarn.lock" ]; then
-           yarn install --immutable
+       if [ ! -f package.json ]; then
+           echo "Asset build skipped, no package.json found"
        else
-           npm install
-       fi
+           echo "Installing front-end dependencies"
 
-       echo "Npm install complete"
-   else
-       echo "Npm install skipped, no package.json file found"
-   fi
+           if [ -f yarn.lock ]; then
+               yarn install --immutable
+           elif [ -f package-lock.json ]; then
+               npm ci
+           else
+               npm install
+           fi
+
+           if grep -q '"build"' package.json; then
+               echo "Building assets"
+
+               if [ -f yarn.lock ]; then
+                   yarn build
+               else
+                   npm run build
+               fi
+
+               echo "Assets built"
+           else
+               echo "No build script defined, skipping asset build"
+           fi
+       fi
+   @else
+       echo "Asset build skipped (artifact ships built assets)"
+   @endif
 @endtask
 
 @task('setup:common_files')
-   echo "Copying common files";
+   set -euo pipefail
 
-   mv {{ $releasePath }}/storage {{ $sharedPath }}/storage
-   echo "Storage moved to the shared directory";
+   echo "Copying common files"
 
-   # Seed the shared .env from the repository's .env.example
-   cp {{ $releasePath }}/.env.example {{ $sharedPath }}/.env
-   echo "Shared .env created from .env.example";
+   if [ -d "{{ $sharedPath }}/storage" ]; then
+       echo "Shared storage already exists, left untouched"
+       rm -rf "{{ $releasePath }}/storage"
+   elif [ -d "{{ $releasePath }}/storage" ]; then
+       mv "{{ $releasePath }}/storage" "{{ $sharedPath }}/storage"
+       echo "Storage moved to the shared directory"
+   else
+       mkdir -p "{{ $sharedPath }}/storage"
+       echo "Shared storage directory created"
+   fi
+
+   if [ -f "{{ $sharedPath }}/.env" ]; then
+       echo "Shared .env already exists, left untouched"
+   elif [ -f "{{ $releasePath }}/.env.example" ]; then
+       cp "{{ $releasePath }}/.env.example" "{{ $sharedPath }}/.env"
+       echo "Shared .env created from .env.example"
+   else
+       touch "{{ $sharedPath }}/.env"
+       echo "Empty shared .env created; fill it in before deploying"
+   fi
 @endtask
 
 @task('make:symlinks')
-   echo "Creating symlinks";
+   set -euo pipefail
 
-   # Remove the release storage directory and .env.example before linking the shared ones.
-   if [ -d {{ $releasePath }}/storage ]; then
-       rm -rf {{ $releasePath }}/storage
-   fi
+   echo "Creating symlinks"
 
-   if [ -f {{ $releasePath }}/.env.example ]; then
-       rm -rf {{ $releasePath }}/.env.example
-   fi
+   # Remove the release storage directory and .env files before linking the shared ones.
+   rm -rf "{{ $releasePath }}/storage"
+   rm -f "{{ $releasePath }}/.env" "{{ $releasePath }}/.env.example"
 
-   # Link shared storage and .env into the release
-   ln -s {{ $sharedPath }}/storage {{ $releasePath }}/storage
-   ln -s {{ $sharedPath }}/.env {{ $releasePath }}/.env
+   ln -s "{{ $sharedPath }}/storage" "{{ $releasePath }}/storage"
+   ln -s "{{ $sharedPath }}/.env" "{{ $releasePath }}/.env"
 
-   # Link the storage folder into public
-   cd {{ $releasePath }}
+   cd "{{ $releasePath }}"
    {{ $php }} artisan storage:link
 
-   echo "Release '.env' and 'storage' have been symlinked";
+   echo "Release '.env' and 'storage' have been symlinked"
 @endtask
 
 @task('setup:generate_app_key')
-   echo "Generating app key";
+   set -euo pipefail
 
-   cd {{ $releasePath }}
-   {{ $php }} artisan key:generate
+   if grep -qE '^APP_KEY=.+' "{{ $sharedPath }}/.env"; then
+       echo "APP_KEY already set, left untouched"
+   else
+       echo "Generating app key"
+
+       cd "{{ $releasePath }}"
+       {{ $php }} artisan key:generate
+   fi
 @endtask
 
 @task('make:link_current_release')
-   echo "Creating current symlink";
+   set -euo pipefail
 
-   if [ -L {{ $currentReleasePath }} ]; then
-       rm -rf {{ $currentReleasePath }}
+   echo "Switching the current release"
+
+   if [ -e "{{ $currentReleasePath }}" ] && [ ! -L "{{ $currentReleasePath }}" ]; then
+       # Server provisioning (e.g. Laravel Forge) often leaves an empty 'current'
+       # directory behind. rmdir only ever removes an empty directory, so a real
+       # deployment can never be deleted here.
+       if rmdir "{{ $currentReleasePath }}" 2>/dev/null; then
+           echo "Removed the empty 'current' directory left over from server provisioning"
+       else
+           echo "{{ $currentReleasePath }} exists, is not a symlink and is not empty; refusing to replace it."
+           exit 1
+       fi
    fi
 
-   if [ -d {{ $releasePath }}/current ]; then
-       rm -rf {{ $releasePath }}/current
+   # Atomic switch: build the symlink aside, then rename over the live one.
+   ln -sfn "{{ $releasePath }}" "{{ $currentReleasePath }}.tmp"
+   mv -Tf "{{ $currentReleasePath }}.tmp" "{{ $currentReleasePath }}"
+
+   if [ "$(readlink "{{ $currentReleasePath }}")" != "{{ $releasePath }}" ]; then
+       echo "Current symlink could not be switched"
+       exit 1
    fi
 
-   ln -nfs {{ $releasePath }} {{ $currentReleasePath }}
-
-   if [ ! -L {{ $currentReleasePath }} ]; then
-       echo "Current symlink could not be created";
-       exit 1;
-   fi
-
-   echo "Current release symlink created";
+   echo "Current release switched to {{ $release }}"
 @endtask
 
 @task('setup:finish')
@@ -266,26 +373,28 @@
 @endtask
 
 @task('check_if_release_exists')
-   if [ ! -d {{ $releasesPath }} ]; then
-       echo "Deploy directory does not exist on the server. Run 'envoy run setup' to set up your deployment directory.";
-       exit 1;
+   if [ ! -d "{{ $releasesPath }}" ]; then
+       echo "Deploy directory does not exist on the server. Run 'envoy run setup' to set up your deployment directory."
+       exit 1
    fi
 @endtask
 
 @task('make:app_down')
    @if ($maintenance === true)
-       {{ $php }} {{ $currentReleasePath }}/artisan down
-       echo "App is in maintenance mode";
+       {{ $php }} "{{ $currentReleasePath }}/artisan" down || true
+       echo "App is in maintenance mode"
    @else
-       echo "Application is not in maintenance mode";
+       echo "Application is not in maintenance mode"
    @endif
 @endtask
 
 @task('make:migration', ['on' => $env])
    @if ($migration === true)
+       set -euo pipefail
+
        echo "Running migrations"
 
-       cd {{ $releasePath }}
+       cd "{{ $releasePath }}"
        {{ $php }} artisan migrate --force
 
        echo "Migrations complete"
@@ -296,9 +405,11 @@
 
 @task('make:db_seed', ['on' => $env])
    @if ($seeder === true)
+       set -euo pipefail
+
        echo "Running seeders"
 
-       cd {{ $releasePath }}
+       cd "{{ $releasePath }}"
        {{ $php }} artisan db:seed --force
 
        echo "Database seeding complete"
@@ -308,60 +419,56 @@
 @endtask
 
 @task('make:cache', ['on' => $env])
-   # Clear the cache held by the currently live release
-   cd {{ $currentReleasePath }}
-   {{ $php }} artisan optimize:clear
-   {{ $php }} artisan config:clear
-   {{ $php }} artisan route:clear
-   {{ $php }} artisan view:clear
-   echo "Cache cleared in the current release";
+   set -euo pipefail
 
-   # Warm the cache for the new release
-   cd {{ $releasePath }}
-   {{ $php }} artisan route:cache
-   {{ $php }} artisan view:cache
-   {{ $php }} artisan config:cache
-   echo "New release has been cached";
+   # Only the new release is touched. The live release keeps its caches until the
+   # symlink switch, and the shared application cache store is never cleared here.
+   cd "{{ $releasePath }}"
+   {{ $php }} artisan optimize
+
+   echo "New release caches warmed (config, events, routes, views)"
 @endtask
 
 @task('make:install_octane', ['on' => $env])
    @if ($octaneInstall === true)
-       cd {{ $releasePath }}
+       set -euo pipefail
+
+       cd "{{ $releasePath }}"
        {{ $php }} artisan octane:install --server={{ $octaneServer }} --no-interaction
 
-       echo "Octane installed";
+       echo "Octane installed"
    @else
-       echo "Octane install skipped";
+       echo "Octane install skipped"
    @endif
 @endtask
 
 @task('make:app_up', ['on' => $env])
-   {{ $php }} {{ $currentReleasePath }}/artisan up
-   echo "App is up";
+   {{ $php }} "{{ $currentReleasePath }}/artisan" up
+   echo "App is up"
 @endtask
 
 @task('make:restart_queue', ['on' => $env])
    @if ($queueRestart === true)
-       cd {{ $releasePath }}
+       cd "{{ $currentReleasePath }}"
        {{ $php }} artisan queue:restart
-       echo "Queue restarted";
+       echo "Queue restarted"
    @else
-       echo "Queue restart skipped";
+       echo "Queue restart skipped"
    @endif
 @endtask
 
 @task('make:horizon:terminate', ['on' => $env])
    @if ($horizonTerminate === true)
-       cd {{ $currentReleasePath }}
+       cd "{{ $currentReleasePath }}"
        {{ $php }} artisan horizon:terminate
-       echo "Horizon terminated, it should restart automatically";
+       echo "Horizon terminated, it should restart automatically"
    @else
-       echo "Horizon restart skipped";
+       echo "Horizon restart skipped"
    @endif
 @endtask
 
 @task('make:reload_octane', ['on' => $env])
-   cd {{ $currentReleasePath }}
+   cd "{{ $currentReleasePath }}"
 
    @if ($octaneReload === true)
        if [ $( {{ $php }} artisan octane:status --no-interaction 2>&1 | grep -c 'server is running' ) -gt 0 ]; then
@@ -377,117 +484,153 @@
 @endtask
 
 @task('make:clean_old_release', ['on' => $env])
-   # Keep only the three most recent releases
-   cd {{ $releasesPath }}
+   set -euo pipefail
 
-   for RELEASE in $(ls -1d * | head -n -3); do
-       echo "Deleting old release $RELEASE"
-       rm -rf "$RELEASE"
+   cd "{{ $releasesPath }}"
+
+   CURRENT_TARGET=$(basename "$(readlink "{{ $currentReleasePath }}")")
+
+   # Keep the live release plus the most recent others, prune the rest by age.
+   (ls -1t | grep -vFx "$CURRENT_TARGET" || true) | tail -n +{{ $releasesToKeep }} | while read -r OLD_RELEASE; do
+       echo "Deleting old release $OLD_RELEASE"
+       rm -rf "./$OLD_RELEASE"
    done
 
-   echo "Old releases cleaned up, only the latest 3 releases are kept";
+   echo "Old releases pruned; keeping the current release and the {{ $releasesToKeep - 1 }} most recent others"
 @endtask
 
 @task('make:check_app_health', ['on' => $env])
-   # Verify the application responds with HTTP 200
-   curl -s -o /dev/null -w "%{http_code}" {{ $appUrl }} | grep 200 > /dev/null 2>&1 || (echo "App is down" && exit 1) && echo "App is up and running";
+   ATTEMPTS=5
+
+   for i in $(seq 1 $ATTEMPTS); do
+       STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "{{ $appUrl }}" || echo "000")
+
+       if [ "$STATUS" = "200" ]; then
+           echo "Health check passed (HTTP $STATUS)"
+           exit 0
+       fi
+
+       echo "Health check attempt $i/$ATTEMPTS returned HTTP $STATUS, retrying in 3s"
+       sleep 3
+   done
+
+   echo "App is unhealthy after $ATTEMPTS attempts. The previous release is still on disk:"
+   echo "  envoy run deploy:rollback --env={{ $env }}"
+   exit 1
 @endtask
 
 @task('sentry:release', ['on' => $env])
    @if ((bool) $sentryEnabled === true)
-       echo "Recording release in Sentry";
+       # Best effort: the release is already live, a Sentry hiccup must not fail the deploy.
+       SENTRY_CLI="{{ $sharedPath }}/bin/sentry-cli"
 
-       mkdir -p /tmp/sentry_cli_installation
-       cd /tmp/sentry_cli_installation
-       wget https://github.com/getsentry/sentry-cli/releases/download/2.23.0/sentry-cli-Linux-x86_64 -O sentry-cli --quiet
-       chmod +x sentry-cli
+       if [ ! -x "$SENTRY_CLI" ]; then
+           echo "Installing sentry-cli"
+           mkdir -p "{{ $sharedPath }}/bin"
+           curl -sL https://github.com/getsentry/sentry-cli/releases/download/2.23.0/sentry-cli-Linux-x86_64 -o "$SENTRY_CLI" && chmod +x "$SENTRY_CLI" || echo "sentry-cli installation failed (non-fatal)"
+       fi
 
-       export SENTRY_AUTH_TOKEN="{{ $sentryToken }}"
-       export SENTRY_ORG="{{ $sentryOrg }}"
-       export SENTRY_PROJECT="{{ $sentryProject }}"
-       export VERSION="{{ $sentryVersion }}"
-       export ENVIRONMENT="{{ $env }}"
+       if [ -x "$SENTRY_CLI" ]; then
+           export SENTRY_AUTH_TOKEN="{{ $sentryToken }}"
+           export SENTRY_ORG="{{ $sentryOrg }}"
+           export SENTRY_PROJECT="{{ $sentryProject }}"
 
-       ./sentry-cli releases new -p "$SENTRY_PROJECT" "$VERSION"
-       ./sentry-cli releases deploys "$VERSION" new -e "$ENVIRONMENT" --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" --version "$VERSION"
+           "$SENTRY_CLI" releases new "{{ $sentryVersion }}" && \
+           "$SENTRY_CLI" releases deploys "{{ $sentryVersion }}" new -e "{{ $env }}" && \
+           "$SENTRY_CLI" releases finalize "{{ $sentryVersion }}" && \
+           echo "Sentry release recorded" || echo "Sentry release failed (non-fatal)"
+       fi
 
-       rm -rf /tmp/sentry_cli_installation
+       true
    @else
-       echo "Sentry release skipped";
+       echo "Sentry release skipped"
    @endif
 @endtask
 
 @task('deploy:complete')
    @if (! empty($slackWebhookUrl))
-       curl -X POST -H 'Content-type: application/json' --data '{"text":"{{ $deploymentSuccess }}"}' {{ $slackWebhookUrl }} > /dev/null 2>&1
+       curl -sf -X POST -H 'Content-type: application/json' --data {{ $deploymentSuccessPayload }} "{{ $slackWebhookUrl }}" > /dev/null 2>&1 || true
    @endif
 
-   echo "Deployment complete, live at {{ $appUrl }}";
+   echo "Deployment complete, live at {{ $appUrl }}"
 @endtask
 
 @task('make:rollback', ['on' => $env])
-   echo "Starting rollback process on the {{ $env }} environment";
+   set -euo pipefail
 
-   cd {{ $currentReleasePath }}
-   {{ $php }} artisan down
-   {{ $php }} artisan cache:clear
+   echo "Starting rollback process on the {{ $env }} environment"
 
-   # Resolve the currently linked release
-   current_release=$(readlink {{ $currentReleasePath }})
+   if [ ! -L "{{ $currentReleasePath }}" ]; then
+       echo "No current release symlink found, nothing to roll back from"
+       exit 1
+   fi
 
-   # Find the previous release
-   cd {{ $releasesPath }}
-   prev_release=$(ls -t | grep -v $(basename $current_release) | head -1)
+   CURRENT_TARGET=$(basename "$(readlink "{{ $currentReleasePath }}")")
 
-   if [ -z "$prev_release" ]; then
+   cd "{{ $releasesPath }}"
+   PREV_RELEASE=$( (ls -1t | grep -vFx "$CURRENT_TARGET" || true) | head -1 )
+
+   if [ -z "$PREV_RELEASE" ]; then
        echo "No previous release found to roll back to"
        exit 1
    fi
 
-   # Point current to the previous release
-   rm {{ $currentReleasePath }}
-   ln -s {{ $releasesPath }}/$prev_release {{ $currentReleasePath }}
-   echo "Rolled back to previous release: $prev_release";
+   echo "Rolling back from $CURRENT_TARGET to $PREV_RELEASE"
+
+   # Atomic switch, no maintenance window needed.
+   ln -sfn "{{ $releasesPath }}/$PREV_RELEASE" "{{ $currentReleasePath }}.tmp"
+   mv -Tf "{{ $currentReleasePath }}.tmp" "{{ $currentReleasePath }}"
+
+   echo "Rolled back to previous release: $PREV_RELEASE"
 
    @if($queueRestart === true)
-       cd {{ $currentReleasePath }}
+       cd "{{ $currentReleasePath }}"
        {{ $php }} artisan queue:restart
-       echo "Queue worker restarted";
-   @endif
-
-   @if($octaneReload === true)
-       cd {{ $currentReleasePath }}
-       {{ $php }} artisan octane:reload
-       echo "Laravel Octane reloaded";
+       echo "Queue worker restarted"
    @endif
 
    @if($horizonTerminate === true)
-       cd {{ $currentReleasePath }}
+       cd "{{ $currentReleasePath }}"
        {{ $php }} artisan horizon:terminate
-       echo "Laravel Horizon terminated";
+       echo "Laravel Horizon terminated"
    @endif
 
-   cd {{ $currentReleasePath }}
-   {{ $php }} artisan up
+   @if($octaneReload === true)
+       cd "{{ $currentReleasePath }}"
+       {{ $php }} artisan octane:reload || true
+       echo "Laravel Octane reloaded"
+   @endif
 @endtask
 
 @task('rollback:complete')
    @if (! empty($slackWebhookUrl))
-       curl -X POST -H 'Content-type: application/json' --data '{"text":"{{ $rollbackSuccessMessage }}"}' {{ $slackWebhookUrl }} > /dev/null 2>&1
+       curl -sf -X POST -H 'Content-type: application/json' --data {{ $rollbackSuccessPayload }} "{{ $slackWebhookUrl }}" > /dev/null 2>&1 || true
    @endif
 
-   echo "Rollback complete, live at {{ $appUrl }}";
+   echo "Rollback complete, live at {{ $appUrl }}"
 @endtask
 
 @task('backups:list')
    for dir in "{{ $backupPath }}"/*; do
+       [ -e "$dir" ] || continue
        echo "$(basename "$dir") | $(stat -c '%y' "$dir" | cut -d ' ' -f 1)"
    done
 @endtask
 
 @task('releases:list')
+   CURRENT_TARGET=$(basename "$(readlink "{{ $currentReleasePath }}" 2>/dev/null || echo '')")
+
    for dir in "{{ $releasesPath }}"/*; do
-       echo "$(basename "$dir") | $(stat -c '%y' "$dir" | cut -d ' ' -f 1)"
+       [ -e "$dir" ] || continue
+
+       NAME=$(basename "$dir")
+       MARKER=""
+
+       if [ "$NAME" = "$CURRENT_TARGET" ]; then
+           MARKER=" (current)"
+       fi
+
+       echo "$NAME | $(stat -c '%y' "$dir" | cut -d ' ' -f 1)$MARKER"
    done
 @endtask
 
@@ -496,9 +639,15 @@
 @endsuccess
 
 @error
-   if (empty($failureMessage)) {
-       $failureMessage = "Task $task failed on the $env environment on $appName. Error message: $error";
-   }
+   // Task bodies are captured at parse time, so per-story "set message" tasks can
+   // never work: the failure message must be built here, where $task is known.
+   $failureMessage = "*Task '$task' failed on $appName*
+       - Environment: $env
+       - Strategy: $strategy
+       - Deployment path: $path
+       - SSH host: $sshHost
+       - Date: $date
+       If the deployment lock was left behind, release it with 'envoy run deploy:unlock --env=$env'.";
 
    @slack($slackWebhookUrl, '', $failureMessage)
 
