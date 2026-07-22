@@ -120,22 +120,27 @@ environment with the `strategy` key.
 
 ### `artifact` (recommended)
 
-CI builds the release and uploads a tarball; the server only extracts it. The
-server needs **no Git access, no Composer authentication and no GitHub or
-registry credentials**, and what was tested in CI is exactly what ships.
+The machine running Envoy (CI or your laptop) builds the release and uploads a
+tarball; the server only extracts it. The server needs **no Git access, no
+Composer authentication and no GitHub or registry credentials**, and what was
+tested in CI is exactly what ships.
 
-The contract: upload the tarball to `{path}/artifacts/incoming.tar.gz`, then run
-the deploy. Bankai consumes (deletes) the artifact after extraction.
+Everything happens inside one command:
 
 ```shell
-# In CI, after composer install --no-dev and the asset build:
-php artisan bankai:artifact                    # creates release.tar.gz
-scp release.tar.gz user@host:{path}/artifacts/incoming.tar.gz
 vendor/bin/envoy run deploy --env=production
 ```
 
-`bankai:artifact` packages the working directory and always excludes `.git`,
-`.github`, `node_modules`, `tests`, `storage`, `.env*` and `auth.json`.
+Right before extraction, Bankai copies the project to a temporary build
+directory (excluding `.git`, `.github`, `node_modules`, `tests`, `storage`,
+`.env*`, `auth.json` and the local `vendor`), runs
+`composer install --no-dev --optimize-autoloader`, builds front-end assets when
+a `package.json` with a `build` script is present, packs the tarball, uploads
+it to `{path}/artifacts/incoming.tar.gz` over SSH, and the server consumes
+(deletes) it after extraction. Your working directory is never modified.
+
+`php artisan bankai:artifact` is also available to package the working
+directory as-is (same exclusions), for inspection or manual distribution.
 
 ### `clone` (default)
 

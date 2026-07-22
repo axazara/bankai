@@ -4,29 +4,12 @@ declare(strict_types=1);
 
 namespace AxaZara\Bankai\Console;
 
+use AxaZara\Bankai\ArtifactBuilder;
 use Illuminate\Console\Command;
 use Symfony\Component\Process\Process;
 
 final class BankaiArtifact extends Command
 {
-    /**
-     * Paths that must never ship in a release artifact: VCS data, local
-     * environment files, credentials, tests, and the shared storage directory
-     * (the server symlinks its own).
-     *
-     * @var list<string>
-     */
-    private const EXCLUDED_PATHS = [
-        './.git',
-        './.github',
-        './node_modules',
-        './tests',
-        './storage',
-        './.env',
-        './.env.*',
-        './auth.json',
-    ];
-
     protected $signature = 'bankai:artifact
         {--output=release.tar.gz : Path of the tarball to create}';
 
@@ -38,8 +21,8 @@ final class BankaiArtifact extends Command
 
         $command = ['tar'];
 
-        foreach (self::EXCLUDED_PATHS as $excludedPath) {
-            $command[] = "--exclude={$excludedPath}";
+        foreach (ArtifactBuilder::EXCLUDED_PATHS as $excludedPath) {
+            $command[] = "--exclude=./{$excludedPath}";
         }
 
         $command[] = '--exclude=' . $this->outputAsExclusion($output);

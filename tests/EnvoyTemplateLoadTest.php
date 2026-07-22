@@ -130,4 +130,14 @@ final class EnvoyTemplateLoadTest extends BaseTestCase
         $this->assertStringContainsString('ln -sfn', $script);
         $this->assertStringContainsString('mv -Tf', $script);
     }
+
+    public function test_the_template_registers_the_artifact_build_hook(): void
+    {
+        $container = $this->loadedContainer('artifact');
+
+        $this->assertNotEmpty(
+            $container->getBeforeCallbacks(),
+            'The @before hook that builds and uploads the artifact is missing.'
+        );
+    }
 }

@@ -22,6 +22,19 @@
 
 @servers([$env => "{$sshUser}@{$sshHost}"])
 
+@before
+    // Artifact strategy: build the release on this machine and upload it right
+    // before the server extracts it, so `envoy run deploy` is self-contained.
+    if ($task === 'make:extract_artifact' && $strategy === 'artifact') {
+        try {
+            AxaZara\Bankai\ArtifactBuilder::buildAndUpload(getcwd(), $sshUser, $sshHost, $artifactPath);
+        } catch (Throwable $e) {
+            echo 'Artifact build failed: ' . $e->getMessage() . "\n";
+            exit(1);
+        }
+    }
+@endbefore
+
 @story('setup' , ['on' => $env])
     setup:directories
     make:clone_repository
@@ -121,6 +134,8 @@
 @endtask
 
 @task('deploy:acquire_lock')
+   mkdir -p "{{ $artifactsPath }}"
+
    # mkdir is atomic: it either creates the lock or fails because one exists.
    if mkdir "{{ $deployLockPath }}" 2>/dev/null; then
        date '+%Y-%m-%d %H:%M:%S' > "{{ $deployLockPath }}/started_at"
@@ -166,10 +181,7 @@
        set -euo pipefail
 
        if [ ! -s "{{ $artifactPath }}" ]; then
-           echo "No artifact found at {{ $artifactPath }}."
-           echo "Build and upload the release artifact first, for example:"
-           echo "  php artisan bankai:artifact"
-           echo "  scp release.tar.gz {{ $sshUser }}@{{ $sshHost }}:{{ $artifactPath }}"
+           echo "No artifact found at {{ $artifactPath }}; the build-and-upload step did not run or failed."
            exit 1
        fi
 
