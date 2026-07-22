@@ -3,6 +3,7 @@
 namespace AxaZara\Bankai;
 
 use AxaZara\Bankai\Traits\ConfigValidationTrait;
+use Illuminate\Support\Env;
 
 class DeploymentConfig
 {
@@ -96,7 +97,7 @@ class DeploymentConfig
      */
     private function resolveRepositoryUrl(): ?string
     {
-        $override = env('BANKAI_REPOSITORY_URL');
+        $override = Env::get('BANKAI_REPOSITORY_URL');
 
         if (is_string($override) && $override !== '') {
             return $override;
