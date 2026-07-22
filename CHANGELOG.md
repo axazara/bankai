@@ -5,6 +5,17 @@ All notable changes to `axazara/bankai` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0](https://github.com/axazara/bankai/compare/v1.0.1...v2.0.0) (2026-07-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deploy:** repository_url with embedded credentials is now rejected; make:npm_install was replaced by make:build_assets (which also runs the build script); make:cache no longer clears caches in the live release.
+
+### Features
+
+* **deploy:** add artifact deployment strategy, locking, and harden the Envoy pipeline ([#23](https://github.com/axazara/bankai/issues/23)) ([e269c6e](https://github.com/axazara/bankai/commit/e269c6e47c1bf96bf01b7d13eebb4eeef6b98def))
+
 ## [1.0.1](https://github.com/axazara/bankai/compare/v1.0.0...v1.0.1) (2026-06-07)
 
 
