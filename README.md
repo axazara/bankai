@@ -188,6 +188,9 @@ Edit the shared environment file created during setup. Every release symlinks to
 
 ### Step 3 — Configure Composer authentication
 
+**Clone strategy only.** With the `artifact` strategy the server never runs
+Composer, so no credentials are needed there — skip this step entirely.
+
 Required only if your application pulls **private** Composer packages or registries. Add an `auth.json` file to the shared directory:
 
 ```shell
@@ -253,8 +256,16 @@ vendor/bin/envoy run deploy:rollback --env={your-environment}
 
 ## Deployment lock
 
-Each deploy takes a lock on the server so two deployments can never interleave.
-If a deployment crashes and leaves the lock behind, release it with:
+At the start of every deploy, Bankai atomically creates a lock directory on the
+server (`{path}/.bankai-deploy.lock`). If the lock already exists, the deploy
+aborts immediately with the timestamp of the run holding it. This guarantees two
+deployments can never interleave: without it, two concurrent runs would race on
+`incoming.tar.gz`, migrations and the `current` symlink.
+
+The lock is released at the end of a successful deploy. It is deliberately
+**not** released on failure, because a half-finished deploy left the server in
+a state that deserves a human look. Once you have checked (and rolled back if
+needed), release it with:
 
 ```shell
 vendor/bin/envoy run deploy:unlock --env={your-environment}
