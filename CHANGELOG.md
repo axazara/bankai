@@ -5,6 +5,13 @@ All notable changes to `axazara/bankai` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1](https://github.com/axazara/bankai/compare/v2.0.0...v2.0.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* **artifact:** copy auth.json into the build directory so composer can authenticate, exclude it from the tarball ([#25](https://github.com/axazara/bankai/issues/25)) ([bd1f10e](https://github.com/axazara/bankai/commit/bd1f10e0656f02538cb083a1761afcfede51659d))
+
 ## [2.0.0](https://github.com/axazara/bankai/compare/v1.0.1...v2.0.0) (2026-07-22)
 
 
