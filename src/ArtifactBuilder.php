@@ -74,7 +74,7 @@ class ArtifactBuilder
 
             echo "Packing the release artifact\n";
             $this->runOrFail(
-                ['tar', '--exclude=./node_modules', '-czf', $tarball, '.'],
+                ['tar', '--exclude=./node_modules', '--exclude=./auth.json', '-czf', $tarball, '.'],
                 $buildDir
             );
 
@@ -101,6 +101,13 @@ class ArtifactBuilder
         $command = ['rsync', '-a'];
 
         foreach (self::EXCLUDED_PATHS as $excludedPath) {
+            // auth.json is needed inside the build directory so Composer can
+            // authenticate against private registries; it is excluded from the
+            // final tarball instead, so it never ships to the server.
+            if ($excludedPath === 'auth.json') {
+                continue;
+            }
+
             $command[] = "--exclude=/{$excludedPath}";
         }
 
