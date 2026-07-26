@@ -40,11 +40,12 @@ class ArtifactBuilder
         string $sourceDir,
         string $sshUser,
         string $sshHost,
-        string $remoteArtifactPath
+        string $remoteArtifactPath,
+        string $composerOptions = ''
     ): void {
         $builder = new self();
 
-        $tarball = $builder->build($sourceDir);
+        $tarball = $builder->build($sourceDir, $composerOptions);
 
         try {
             $builder->upload($tarball, $sshUser, $sshHost, $remoteArtifactPath);
@@ -53,7 +54,26 @@ class ArtifactBuilder
         }
     }
 
-    public function build(string $sourceDir): string
+    /**
+     * Build the Composer install command from the environment's configured
+     * `composer_options`, mirroring what the clone strategy runs on the server.
+     * An empty option string installs with dev dependencies, exactly as it
+     * would server-side.
+     *
+     * @return list<string>
+     */
+    public static function composerInstallCommand(string $composerOptions): array
+    {
+        $options = preg_split('/\s+/', trim($composerOptions), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return array_values(array_unique(array_merge(
+            ['composer', 'install'],
+            $options,
+            ['--no-progress', '--no-interaction'],
+        )));
+    }
+
+    public function build(string $sourceDir, string $composerOptions = ''): string
     {
         $buildDir = sys_get_temp_dir() . '/bankai-build-' . uniqid();
         $tarball = sys_get_temp_dir() . '/bankai-artifact-' . uniqid() . '.tar.gz';
@@ -64,11 +84,8 @@ class ArtifactBuilder
             echo "Copying the project to the build directory\n";
             $this->copyProject($sourceDir, $buildDir);
 
-            echo "Installing production dependencies\n";
-            $this->runOrFail(
-                ['composer', 'install', '--no-dev', '--prefer-dist', '--optimize-autoloader', '--no-progress', '--no-interaction'],
-                $buildDir
-            );
+            echo "Installing dependencies (composer install {$composerOptions})\n";
+            $this->runOrFail(self::composerInstallCommand($composerOptions), $buildDir);
 
             $this->buildAssets($buildDir);
 

@@ -27,7 +27,7 @@
     // before the server extracts it, so `envoy run deploy` is self-contained.
     if ($task === 'make:extract_artifact' && $strategy === 'artifact') {
         try {
-            AxaZara\Bankai\ArtifactBuilder::buildAndUpload(getcwd(), $sshUser, $sshHost, $artifactPath);
+            AxaZara\Bankai\ArtifactBuilder::buildAndUpload(getcwd(), $sshUser, $sshHost, $artifactPath, $composerOptions);
         } catch (Throwable $e) {
             echo 'Artifact build failed: ' . $e->getMessage() . "\n";
             exit(1);

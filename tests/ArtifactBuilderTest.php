@@ -32,6 +32,30 @@ final class ArtifactBuilderTest extends BaseTestCase
         exec('rm -rf ' . escapeshellarg($this->sourceDir));
     }
 
+    public function test_the_composer_command_uses_the_configured_environment_options(): void
+    {
+        $this->assertSame(
+            ['composer', 'install', '--no-dev', '--prefer-dist', '--optimize-autoloader', '--no-progress', '--no-interaction'],
+            ArtifactBuilder::composerInstallCommand('--no-dev --prefer-dist --optimize-autoloader')
+        );
+    }
+
+    public function test_empty_composer_options_install_with_dev_dependencies(): void
+    {
+        $this->assertSame(
+            ['composer', 'install', '--no-progress', '--no-interaction'],
+            ArtifactBuilder::composerInstallCommand('')
+        );
+    }
+
+    public function test_duplicate_composer_options_are_deduplicated(): void
+    {
+        $this->assertSame(
+            ['composer', 'install', '--no-dev', '--no-progress', '--no-interaction'],
+            ArtifactBuilder::composerInstallCommand('--no-dev --no-progress --no-interaction')
+        );
+    }
+
     public function test_it_builds_a_tarball_with_production_vendor_and_without_sensitive_files(): void
     {
         ob_start();
