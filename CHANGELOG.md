@@ -5,6 +5,14 @@ All notable changes to `axazara/bankai` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3](https://github.com/axazara/bankai/compare/v2.0.2...v2.0.3) (2026-08-02)
+
+
+### Bug Fixes
+
+* **config:** name the config block a validation failure came from ([#30](https://github.com/axazara/bankai/issues/30)) ([74227f4](https://github.com/axazara/bankai/commit/74227f422af9044d8b50a63a6a799371e8bbb847))
+* **octane:** stop the master on rollback and fix the deploy ordering ([#29](https://github.com/axazara/bankai/issues/29)) ([05ca5aa](https://github.com/axazara/bankai/commit/05ca5aaa932df9af95843c550c5ce1bc42f2fd49))
+
 ## [2.0.2](https://github.com/axazara/bankai/compare/v2.0.1...v2.0.2) (2026-07-26)
 
 
