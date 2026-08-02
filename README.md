@@ -297,6 +297,11 @@ Quickly revert to the previous release (atomic symlink switch, no maintenance wi
 vendor/bin/envoy run deploy:rollback --env={your-environment}
 ```
 
+The rollback is also the recovery path for a deploy that died halfway through: it
+restarts the queue workers, Horizon and Octane on the restored release, lifts the
+maintenance mode a failed deploy may have left behind, and health checks the
+result before reporting success.
+
 ## Deployment lock
 
 At the start of every deploy, Bankai atomically creates a lock directory on the

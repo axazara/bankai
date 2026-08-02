@@ -80,6 +80,7 @@
 @story('deploy:rollback', ['on' => $env])
     make:rollback
     run:after_rollback
+    make:app_up
     make:check_app_health
     rollback:complete
 @endstory
@@ -444,6 +445,9 @@
 @endtask
 
 @task('make:app_up', ['on' => $env])
+   # Deliberately unconditional: a deploy that failed after 'make:app_down' leaves
+   # the maintenance flag behind in the shared storage, so the rollback has to be
+   # able to clear it whatever the environment's own 'maintenance' setting is.
    {{ $php }} "{{ $currentReleasePath }}/artisan" up
    echo "App is up"
 @endtask
@@ -482,7 +486,12 @@
            echo "Octane is running, stopping the master of the old release"
 
            if ! {{ $php }} artisan octane:stop --no-interaction; then
+               # Failing here is deliberate. The old master is very likely still alive
+               # and would keep serving the previous code against an already migrated
+               # database, so the app must stay down until a human has looked at it.
                echo "Octane could not be stopped; the new release will not be served."
+               echo "The app is left down on purpose. Restore the previous release with:"
+               echo "  envoy run deploy:rollback --env={{ $env }}"
                exit 1
            fi
 
