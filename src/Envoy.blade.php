@@ -66,10 +66,10 @@
     make:cache
     run:after_deploy
     make:link_current_release
-    make:app_up
     make:restart_queue
     make:horizon:terminate
     make:reload_octane
+    make:app_up
     make:check_app_health
     make:clean_old_release
     deploy:release_lock
@@ -80,6 +80,8 @@
 @story('deploy:rollback', ['on' => $env])
     make:rollback
     run:after_rollback
+    make:app_up
+    make:check_app_health
     rollback:complete
 @endstory
 
@@ -443,6 +445,9 @@
 @endtask
 
 @task('make:app_up', ['on' => $env])
+   # Deliberately unconditional: a deploy that failed after 'make:app_down' leaves
+   # the maintenance flag behind in the shared storage, so the rollback has to be
+   # able to clear it whatever the environment's own 'maintenance' setting is.
    {{ $php }} "{{ $currentReleasePath }}/artisan" up
    echo "App is up"
 @endtask
@@ -471,10 +476,26 @@
    cd "{{ $currentReleasePath }}"
 
    @if ($octaneReload === true)
-       if [ $( {{ $php }} artisan octane:status --no-interaction 2>&1 | grep -c 'server is running' ) -gt 0 ]; then
-           echo "Octane is running. Stopping it in the old release; supervisor will restart it in the new release."
-           {{ $php }} artisan octane:stop --no-interaction
-           echo "Octane stopped in the old release"
+       # Reloading would only recycle the workers of the running master, which still
+       # lives in the old release directory (base_path() is resolved from __FILE__ at
+       # boot, after symlink dereferencing). Stopping the master is the only way to get
+       # the new code served: the process manager respawns it and it re-resolves
+       # 'current'. octane:status exits 0 when a server is running, 1 otherwise;
+       # the exit code is more stable across Octane versions than its output.
+       if {{ $php }} artisan octane:status --no-interaction > /dev/null 2>&1; then
+           echo "Octane is running, stopping the master of the old release"
+
+           if ! {{ $php }} artisan octane:stop --no-interaction; then
+               # Failing here is deliberate. The old master is very likely still alive
+               # and would keep serving the previous code against an already migrated
+               # database, so the app must stay down until a human has looked at it.
+               echo "Octane could not be stopped; the new release will not be served."
+               echo "The app is left down on purpose. Restore the previous release with:"
+               echo "  envoy run deploy:rollback --env={{ $env }}"
+               exit 1
+           fi
+
+           echo "Octane stopped, the process manager will restart it on the new release"
        else
            echo "Octane is not running, skipping restart."
        fi
@@ -497,6 +518,14 @@
    done
 
    echo "Old releases pruned; keeping the current release and the {{ $releasesToKeep - 1 }} most recent others"
+
+   # Compiled view filenames are hashed from the view's absolute path, so every
+   # release writes a brand new set into the shared storage and nothing ever
+   # removes the previous ones. Prune the entries no release has touched in a month.
+   if [ -d "{{ $sharedPath }}/storage/framework/views" ]; then
+       find "{{ $sharedPath }}/storage/framework/views" -type f -name '*.php' -mtime +30 -delete 2>/dev/null || true
+       echo "Compiled views older than 30 days pruned from the shared storage"
+   fi
 @endtask
 
 @task('make:check_app_health', ['on' => $env])
@@ -514,7 +543,7 @@
        sleep 3
    done
 
-   echo "App is unhealthy after $ATTEMPTS attempts. The previous release is still on disk:"
+   echo "App is unhealthy after $ATTEMPTS attempts. Previous releases are still on disk:"
    echo "  envoy run deploy:rollback --env={{ $env }}"
    exit 1
 @endtask
@@ -597,8 +626,21 @@
 
    @if($octaneReload === true)
        cd "{{ $currentReleasePath }}"
-       {{ $php }} artisan octane:reload || true
-       echo "Laravel Octane reloaded"
+
+       # Same reasoning as 'make:reload_octane': reloading would only recycle the
+       # workers of a master still running from the release we are leaving.
+       if {{ $php }} artisan octane:status --no-interaction > /dev/null 2>&1; then
+           echo "Octane is running, stopping the master of the rolled back release"
+
+           if ! {{ $php }} artisan octane:stop --no-interaction; then
+               echo "Octane could not be stopped; the rolled back release will not be served."
+               exit 1
+           fi
+
+           echo "Octane stopped, the process manager will restart it on the rolled back release"
+       else
+           echo "Octane is not running, skipping restart."
+       fi
    @endif
 @endtask
 

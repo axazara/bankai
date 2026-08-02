@@ -15,14 +15,17 @@ use PHPUnit\Framework\TestCase as BaseTestCase;
  */
 final class EnvoyTemplateLoadTest extends BaseTestCase
 {
-    private function loadedContainer(string $strategy): TaskContainer
+    /**
+     * @param array<string, mixed> $overrides
+     */
+    private function loadedContainer(string $strategy, array $overrides = []): TaskContainer
     {
         $container = new TaskContainer();
 
         $container->load(
             __DIR__ . '/../src/Envoy.blade.php',
             new Compiler(),
-            $this->templateVariables($strategy)
+            array_merge($this->templateVariables($strategy), $overrides)
         );
 
         return $container;
@@ -91,6 +94,82 @@ final class EnvoyTemplateLoadTest extends BaseTestCase
             array_search('make:clean_old_release', $story, true),
             array_search('make:check_app_health', $story, true)
         );
+
+        // Octane only serves the new code once its master has been restarted, so the
+        // app must stay down until then: bringing it up earlier would serve the old
+        // code against an already migrated database.
+        $this->assertLessThan(
+            array_search('make:app_up', $story, true),
+            array_search('make:reload_octane', $story, true)
+        );
+
+        $this->assertLessThan(
+            array_search('make:check_app_health', $story, true),
+            array_search('make:app_up', $story, true)
+        );
+    }
+
+    public function test_the_rollback_story_health_checks_the_restored_release(): void
+    {
+        $container = $this->loadedContainer('clone');
+
+        $story = $container->getMacro('deploy:rollback');
+
+        $this->assertContains('make:check_app_health', $story);
+
+        $this->assertLessThan(
+            array_search('rollback:complete', $story, true),
+            array_search('make:check_app_health', $story, true)
+        );
+    }
+
+    public function test_the_rollback_story_clears_the_maintenance_mode(): void
+    {
+        // A deploy that failed after 'make:app_down' leaves the maintenance flag in
+        // the shared storage. The rollback is the recovery path, so it has to lift it,
+        // and it has to do so before the release is health checked.
+        $container = $this->loadedContainer('clone');
+
+        $story = $container->getMacro('deploy:rollback');
+
+        $this->assertContains('make:app_up', $story);
+
+        $this->assertLessThan(
+            array_search('make:check_app_health', $story, true),
+            array_search('make:app_up', $story, true)
+        );
+    }
+
+    public function test_the_app_is_brought_up_regardless_of_the_maintenance_setting(): void
+    {
+        $container = $this->loadedContainer('clone', ['maintenance' => false]);
+
+        $this->assertStringContainsString('artisan" up', $container->getTask('make:app_up')->script);
+    }
+
+    public function test_octane_is_stopped_rather_than_reloaded_on_deploy_and_rollback(): void
+    {
+        $container = $this->loadedContainer('clone', ['octaneReload' => true]);
+
+        foreach (['make:reload_octane', 'make:rollback'] as $task) {
+            $script = $container->getTask($task)->script;
+
+            // 'octane:reload' recycles the workers of a master still booted from the
+            // release being left behind, so it would keep serving the old code.
+            $this->assertStringNotContainsString('octane:reload', $script);
+            $this->assertStringContainsString('octane:stop', $script);
+            $this->assertStringContainsString('octane:status --no-interaction > /dev/null 2>&1', $script);
+        }
+    }
+
+    public function test_stale_compiled_views_are_pruned_from_the_shared_storage(): void
+    {
+        $container = $this->loadedContainer('clone');
+
+        $script = $container->getTask('make:clean_old_release')->script;
+
+        $this->assertStringContainsString('/var/www/app/shared/storage/framework/views', $script);
+        $this->assertStringContainsString('-mtime +30 -delete', $script);
     }
 
     public function test_the_clone_strategy_renders_git_tasks_and_skips_artifact_tasks(): void
