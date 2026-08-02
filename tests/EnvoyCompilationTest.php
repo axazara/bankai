@@ -77,4 +77,23 @@ final class EnvoyCompilationTest extends BaseTestCase
 
         $this->assertFalse($open, 'Compiled template ended with an unterminated <?php block.');
     }
+
+    public function test_the_failure_notification_goes_through_the_guarded_slack_helper(): void
+    {
+        $source = file_get_contents(__DIR__ . '/../src/Envoy.blade.php');
+
+        // Envoy's @slack directive posts unconditionally, so a failed deployment
+        // with no webhook configured raises a notification error on top of the
+        // real one -- exactly when the real one needs to be readable.
+        $this->assertStringNotContainsString(
+            '@slack(',
+            $source,
+            "The @error handler must not use Envoy's @slack directive; use AxaZara\\Bankai\\Slack::send(), which no-ops on an empty webhook.",
+        );
+
+        $this->assertStringContainsString(
+            '\AxaZara\Bankai\Slack::send($failureMessage, $slackWebhookUrl);',
+            $source,
+        );
+    }
 }

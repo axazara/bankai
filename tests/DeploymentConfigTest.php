@@ -59,6 +59,31 @@ class DeploymentConfigTest extends TestCase
         new DeploymentConfig('staging');
     }
 
+    public function test_a_validation_failure_names_the_config_block_at_fault(): void
+    {
+        config([
+            'bankai.sentry.enabled' => true,
+            'bankai.sentry.token'   => '',
+        ]);
+
+        // On its own, {"token":["The token field is required."]} gives no clue
+        // which of the three validated blocks failed, nor which key to set.
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Invalid configuration for [bankai.sentry]');
+
+        new DeploymentConfig('staging');
+    }
+
+    public function test_the_named_block_points_at_the_environment_that_failed(): void
+    {
+        config(['bankai.environments.staging.ssh_host' => null]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Invalid configuration for [bankai.environments.staging]');
+
+        new DeploymentConfig('staging');
+    }
+
     public function test_it_throws_for_an_invalid_octane_server(): void
     {
         config(['bankai.environments.staging.octane.server' => 'not-a-server']);

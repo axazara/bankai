@@ -21,7 +21,7 @@ trait ConfigValidationTrait
         ];
 
         foreach ($configurations as $configKey => $rules) {
-            $this->validate((array) $this->getConfig($configKey), $rules);
+            $this->validate((array) $this->getConfig($configKey), $rules, $configKey);
         }
     }
 
@@ -30,12 +30,15 @@ trait ConfigValidationTrait
         return config($key);
     }
 
-    private function validate(array $data, array $rules): void
+    private function validate(array $data, array $rules, string $configKey): void
     {
         $validator = Validator::make($data, $rules);
 
         if ($validator->fails()) {
-            throw new \RuntimeException('Validation error: ' . $validator->errors());
+            // Name the config block: on its own, a message like
+            // {"token":["The token field is required."]} gives no clue which of
+            // the three validated blocks failed, let alone which key to set.
+            throw new \RuntimeException("Invalid configuration for [{$configKey}]: " . $validator->errors());
         }
     }
 

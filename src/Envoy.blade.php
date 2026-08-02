@@ -691,7 +691,11 @@
        - Date: $date
        If the deployment lock was left behind, release it with 'envoy run deploy:unlock --env=$env'.";
 
-   @slack($slackWebhookUrl, '', $failureMessage)
+   // Not Envoy's own slack directive: it posts unconditionally, so a deployment
+   // that fails with no webhook configured raises a notification error on top of
+   // the real one. Slack::send() no-ops on a null or empty URL, matching the
+   // emptiness guard the two success notification paths already carry.
+   \AxaZara\Bankai\Slack::send($failureMessage, $slackWebhookUrl);
 
    echo "Envoy task has failed";
 @enderror
