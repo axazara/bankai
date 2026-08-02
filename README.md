@@ -220,6 +220,49 @@ vendor/bin/envoy run deploy --env={your-environment}
 
 Point your web server at the `current/public` directory. For example, with [Laravel Forge](https://forge.laravel.com/) you should set your site's web directory to `current/public`. The `current` symlink always points to the latest release.
 
+## Laravel Octane
+
+Enabling `octane.reload` does **not** run `octane:reload`. Reloading only recycles
+the workers of the running master, and that master is booted from the release
+directory it was started in (`base_path()` is resolved from `__FILE__`, after the
+symlink has been dereferenced). It would keep serving the old code forever.
+
+Bankai stops the master instead and lets your process manager respawn it, so the
+new process re-resolves `current` and picks up the new release. This requires a
+correctly configured process manager, otherwise the application simply stays down
+until the health check fails.
+
+**Supervisor program (Octane, Horizon and queue workers alike):**
+
+```ini
+[program:app-octane]
+command=php /var/www/your-app/current/artisan octane:start --server=swoole --host=127.0.0.1 --port=8000
+directory=/var/www/your-app/current   ; never point this at a release directory
+autostart=true
+autorestart=true                      ; not 'unexpected': a clean octane:stop exits 0
+user=your-user
+```
+
+With `autorestart=unexpected` and `exitcodes=0`, Supervisor treats the clean exit
+of `octane:stop` as normal and never restarts the process.
+
+Two more constraints:
+
+- **`storage/` must stay shared.** Octane writes its server state file under
+  `storage/logs`, which is how a command run from the new release can stop the
+  master started by the old one. Un-sharing `storage/` breaks this silently.
+- **`artisan down` does not cover the restart window.** Once the master is dead,
+  Nginx gets a connection refused and returns a raw 502, not Laravel's maintenance
+  page. If you want a clean page, serve it from the web server:
+
+  ```nginx
+  error_page 502 503 504 /maintenance.html;
+  location = /maintenance.html {
+      root /var/www/your-app/shared/public;
+      internal;
+  }
+  ```
+
 ## Lifecycle hooks
 
 Bankai exposes three hooks you can define in your `Envoy.blade.php`:
