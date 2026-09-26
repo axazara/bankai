@@ -9,7 +9,9 @@ return [
         'repository_url'    => 'git@github.com:your-org/your-repository.git',
 
         // Slack Incoming Webhook URL used to post deployment notifications.
-        // Leave null to disable Slack notifications.
+        // This is a secret: never commit it. Provide it through the
+        // BANKAI_SLACK_WEBHOOK_URL environment variable (a CI secret).
+        // Leave it unset to disable Slack notifications.
         'slack_webhook_url' => env('BANKAI_SLACK_WEBHOOK_URL'),
 
         // How many releases to keep on the server (the live one included).
@@ -20,7 +22,10 @@ return [
         'enabled'            => false,
         'organization'       => 'your-organization',
         'project'            => 'your-project',
-        'token'              => 'your-token',
+        // Sentry auth token. This is a secret: never commit it. Provide it through
+        // the BANKAI_SENTRY_TOKEN environment variable (a CI secret). When it is
+        // unset, the Sentry release step is skipped.
+        'token'              => env('BANKAI_SENTRY_TOKEN'),
         // If null, the Sentry release name defaults to the current release; otherwise this value is used.
         'version'            => null,
     ],

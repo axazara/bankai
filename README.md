@@ -42,7 +42,8 @@ return [
         // CI can inject an ephemeral token-bearing URL through the
         // BANKAI_REPOSITORY_URL environment variable instead.
         'repository_url'    => 'git@github.com:your-org/your-repository.git',
-        // Slack Incoming Webhook URL; leave null to disable notifications
+        // Slack Incoming Webhook URL (a secret, see "Secrets" below);
+        // leave it unset to disable notifications
         'slack_webhook_url' => env('BANKAI_SLACK_WEBHOOK_URL'),
         // How many releases to keep on the server (the live one included)
         'releases_to_keep'  => 3,
@@ -78,6 +79,41 @@ return [
     ],
 ];
 ```
+
+### Secrets
+
+`config/bankai.php` is committed, so it must never hold a secret. Bankai reads
+its secrets from environment variables on the machine running Envoy (your CI
+runner or your laptop). Each variable takes precedence over the matching
+configuration key:
+
+| Environment variable       | Configuration key            | Purpose                                                |
+|----------------------------|------------------------------|--------------------------------------------------------|
+| `BANKAI_SLACK_WEBHOOK_URL` | `settings.slack_webhook_url` | Slack Incoming Webhook for deployment notifications    |
+| `BANKAI_SENTRY_TOKEN`      | `sentry.token`               | Sentry auth token used to record releases              |
+| `BANKAI_REPOSITORY_URL`    | `settings.repository_url`    | Ephemeral token-bearing clone URL (`clone` strategy)   |
+
+Values from the environment are validated exactly like configured ones: an
+invalid webhook URL, or Sentry enabled without a token, stops the deployment
+before anything reaches the server.
+
+In GitHub Actions, store them as repository or environment secrets and expose
+them to the Envoy step:
+
+```yaml
+- name: Deploy
+  run: vendor/bin/envoy run deploy --env=production
+  env:
+    BANKAI_SLACK_WEBHOOK_URL: ${{ secrets.BANKAI_SLACK_WEBHOOK_URL }}
+    BANKAI_SENTRY_TOKEN: ${{ secrets.BANKAI_SENTRY_TOKEN }}
+```
+
+For a local deployment, export them in your shell or add them to your local,
+uncommitted `.env`.
+
+> If a secret was ever committed, removing it from the file is not enough: it
+> stays in the Git history. Rotate it (regenerate the Slack webhook, revoke the
+> Sentry token), then store the new value as described above.
 
 ### Example `Envoy.blade.php`
 
@@ -343,7 +379,7 @@ Bankai can record a release in Sentry after each deployment. To enable it, add a
     'enabled'      => false,
     'organization' => 'your-organization',
     'project'      => 'your-project',
-    'token'        => 'your-token',
+    'token'        => env('BANKAI_SENTRY_TOKEN'), // Never commit the token itself
     'version'      => null, // Defaults to the current release name when null
 ],
 ```
@@ -351,7 +387,9 @@ Bankai can record a release in Sentry after each deployment. To enable it, add a
 - `sentry.enabled`: Set to `true` to enable Sentry integration.
 - `sentry.organization`: Your Sentry organization.
 - `sentry.project`: Your Sentry project.
-- `sentry.token`: Your Sentry auth token. Learn more [here](https://docs.sentry.io/product/accounts/auth-tokens).
+- `sentry.token`: Your Sentry auth token, provided through the `BANKAI_SENTRY_TOKEN`
+  environment variable (see [Secrets](#secrets)). It is required when Sentry is
+  enabled. Learn more [here](https://docs.sentry.io/product/accounts/auth-tokens).
 - `sentry.version`: The Sentry release version. Defaults to the current release name.
 
 ## Contributing

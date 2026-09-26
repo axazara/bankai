@@ -2,6 +2,7 @@
 
 namespace AxaZara\Bankai\Traits;
 
+use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Validator;
 
 trait ConfigValidationTrait
@@ -12,17 +13,51 @@ trait ConfigValidationTrait
             throw new \RuntimeException("Unknown deployment environment: '{$environment}'. Define it under 'environments' in config/bankai.php.");
         }
 
+        // Secrets are validated as resolved, so a value injected through its
+        // environment variable satisfies the rules just like a configured one.
         $configurations = [
-            "bankai.environments.{$environment}" => $this->getEnvironmentRules(),
-            'bankai.settings'                    => $this->getSettingsRules(),
-            'bankai.sentry'                      => config('bankai.sentry.enabled')
-                ? $this->getSentryRules()
-                : [],
+            "bankai.environments.{$environment}" => [
+                (array) $this->getConfig("bankai.environments.{$environment}"),
+                $this->getEnvironmentRules(),
+            ],
+            'bankai.settings' => [
+                [
+                    ...(array) $this->getConfig('bankai.settings'),
+                    'slack_webhook_url' => $this->resolveSecret('BANKAI_SLACK_WEBHOOK_URL', 'bankai.settings.slack_webhook_url'),
+                ],
+                $this->getSettingsRules(),
+            ],
+            'bankai.sentry' => [
+                [
+                    ...(array) $this->getConfig('bankai.sentry'),
+                    'token' => $this->resolveSecret('BANKAI_SENTRY_TOKEN', 'bankai.sentry.token'),
+                ],
+                config('bankai.sentry.enabled') ? $this->getSentryRules() : [],
+            ],
         ];
 
-        foreach ($configurations as $configKey => $rules) {
-            $this->validate((array) $this->getConfig($configKey), $rules, $configKey);
+        foreach ($configurations as $configKey => [$data, $rules]) {
+            $this->validate($data, $rules, $configKey);
         }
+    }
+
+    /**
+     * Resolve a secret, preferring the given environment variable so CI can
+     * inject it from its secret store instead of committing it to the
+     * configuration file. Falls back to the configured value, and returns
+     * null when neither is set.
+     */
+    private function resolveSecret(string $environmentVariable, string $configKey): ?string
+    {
+        $override = Env::get($environmentVariable);
+
+        if (is_string($override) && $override !== '') {
+            return $override;
+        }
+
+        $configured = $this->getConfig($configKey);
+
+        return is_string($configured) && $configured !== '' ? $configured : null;
     }
 
     private function getConfig(string $key): mixed

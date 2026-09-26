@@ -175,4 +175,95 @@ class DeploymentConfigTest extends TestCase
             unset($_ENV['BANKAI_REPOSITORY_URL'], $_SERVER['BANKAI_REPOSITORY_URL']);
         }
     }
+
+    public function test_the_slack_webhook_url_can_be_provided_from_the_environment(): void
+    {
+        $this->withEnvironmentVariable('BANKAI_SLACK_WEBHOOK_URL', 'https://hooks.slack.com/services/from/ci/secret', function (): void {
+            $variables = (new DeploymentConfig('staging'))->extractVariables();
+
+            $this->assertSame('https://hooks.slack.com/services/from/ci/secret', $variables['slackWebhookUrl']);
+        });
+    }
+
+    public function test_the_slack_webhook_url_environment_variable_overrides_the_configured_value(): void
+    {
+        config(['bankai.settings.slack_webhook_url' => 'https://hooks.slack.com/services/configured']);
+
+        $this->withEnvironmentVariable('BANKAI_SLACK_WEBHOOK_URL', 'https://hooks.slack.com/services/from/ci/secret', function (): void {
+            $variables = (new DeploymentConfig('staging'))->extractVariables();
+
+            $this->assertSame('https://hooks.slack.com/services/from/ci/secret', $variables['slackWebhookUrl']);
+        });
+    }
+
+    public function test_the_slack_webhook_url_is_null_when_nothing_is_configured(): void
+    {
+        $variables = (new DeploymentConfig('staging'))->extractVariables();
+
+        $this->assertNull($variables['slackWebhookUrl']);
+    }
+
+    public function test_the_sentry_token_can_be_provided_from_the_environment(): void
+    {
+        config([
+            'bankai.sentry.enabled' => true,
+            'bankai.sentry.token'   => null,
+        ]);
+
+        $this->withEnvironmentVariable('BANKAI_SENTRY_TOKEN', 'sntrys_from_ci', function (): void {
+            $variables = (new DeploymentConfig('staging'))->extractVariables();
+
+            $this->assertTrue($variables['sentryEnabled']);
+            $this->assertSame('sntrys_from_ci', $variables['sentryToken']);
+        });
+    }
+
+    public function test_the_sentry_token_environment_variable_overrides_the_configured_value(): void
+    {
+        config(['bankai.sentry.enabled' => true]);
+
+        $this->withEnvironmentVariable('BANKAI_SENTRY_TOKEN', 'sntrys_from_ci', function (): void {
+            $variables = (new DeploymentConfig('staging'))->extractVariables();
+
+            $this->assertSame('sntrys_from_ci', $variables['sentryToken']);
+        });
+    }
+
+    public function test_it_throws_when_sentry_is_enabled_without_a_token(): void
+    {
+        config([
+            'bankai.sentry.enabled' => true,
+            'bankai.sentry.token'   => null,
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Invalid configuration for [bankai.sentry]');
+
+        new DeploymentConfig('staging');
+    }
+
+    public function test_it_throws_when_the_slack_webhook_url_from_the_environment_is_invalid(): void
+    {
+        $this->withEnvironmentVariable('BANKAI_SLACK_WEBHOOK_URL', 'not-a-url', function (): void {
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('Invalid configuration for [bankai.settings]');
+
+            new DeploymentConfig('staging');
+        });
+    }
+
+    /**
+     * Run the callback with an environment variable set, then remove it.
+     */
+    private function withEnvironmentVariable(string $name, string $value, callable $callback): void
+    {
+        $_ENV[$name] = $value;
+        $_SERVER[$name] = $value;
+
+        try {
+            $callback();
+        } finally {
+            unset($_ENV[$name], $_SERVER[$name]);
+        }
+    }
 }
