@@ -55,7 +55,7 @@ class DeploymentConfig
         return [
             'strategy'           => $this->strategy,
             'repositoryUrl'      => $this->repositoryUrl,
-            'slackWebhookUrl'    => $this->getConfig('bankai.settings.slack_webhook_url'),
+            'slackWebhookUrl'    => $this->resolveSecret('BANKAI_SLACK_WEBHOOK_URL', 'bankai.settings.slack_webhook_url'),
             'appName'            => config('app.name'),
             'branch'             => $environmentSettings['branch'],
             'sshHost'            => $environmentSettings['ssh_host'],
@@ -135,7 +135,7 @@ class DeploymentConfig
             'sentryEnabled'      => $this->getConfig('bankai.sentry.enabled'),
             'sentryOrg'          => $this->getConfig('bankai.sentry.organization'),
             'sentryProject'      => $this->getConfig('bankai.sentry.project'),
-            'sentryToken'        => $this->getConfig('bankai.sentry.token'),
+            'sentryToken'        => $this->resolveSecret('BANKAI_SENTRY_TOKEN', 'bankai.sentry.token'),
             'sentryVersion'      => $version,
         ];
     }
