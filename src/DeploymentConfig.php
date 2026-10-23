@@ -19,12 +19,17 @@ class DeploymentConfig
 
     private readonly ?string $repositoryUrl;
 
+    /**
+     * @var array<string, mixed>
+     */
+    private readonly array $settings;
+
     public function __construct(
         public readonly string $env
     ) {
-        $this->validateConfiguration(environment: $env);
+        $this->settings = $this->validateConfiguration(environment: $env);
 
-        $this->strategy = $this->getConfig("bankai.environments.{$env}.strategy") ?? self::STRATEGY_CLONE;
+        $this->strategy = $this->settings['strategy'];
         $this->repositoryUrl = $this->resolveRepositoryUrl();
 
         if ($this->strategy === self::STRATEGY_CLONE && ($this->repositoryUrl === null || $this->repositoryUrl === '')) {
@@ -37,7 +42,7 @@ class DeploymentConfig
 
     public function extractVariables(): array
     {
-        $environmentSettings = $this->getConfig('bankai.environments.' . $this->env);
+        $environmentSettings = $this->settings;
         $release = $this->env . '_' . date('Ymd') . '_' . date('His');
         $path = rtrim($environmentSettings['path'], '/');
 
@@ -55,16 +60,16 @@ class DeploymentConfig
         return [
             'strategy'           => $this->strategy,
             'repositoryUrl'      => $this->repositoryUrl,
-            'slackWebhookUrl'    => $this->getConfig('bankai.settings.slack_webhook_url'),
+            'slackWebhookUrl'    => $this->resolveSecret('BANKAI_SLACK_WEBHOOK_URL', 'bankai.settings.slack_webhook_url'),
             'appName'            => config('app.name'),
             'branch'             => $environmentSettings['branch'],
             'sshHost'            => $environmentSettings['ssh_host'],
             'sshUser'            => $environmentSettings['ssh_user'],
             'appUrl'             => $environmentSettings['url'],
             'path'               => $path,
-            'php'                => $environmentSettings['php'] ?? 'default_php_version',
-            'composer'           => $environmentSettings['composer'] ?? 'default_composer_path',
-            'composerOptions'    => $environmentSettings['composer_options'] ?? '',
+            'php'                => $environmentSettings['php'],
+            'composer'           => $environmentSettings['composer'],
+            'composerOptions'    => (string) $environmentSettings['composer_options'],
             'migration'          => $environmentSettings['migration'],
             'seeder'             => $environmentSettings['seeder'],
             'queueRestart'       => $environmentSettings['queue']['restart'],
@@ -84,6 +89,8 @@ class DeploymentConfig
             'artifactsPath'      => "{$path}/artifacts",
             'artifactPath'       => "{$path}/artifacts/incoming.tar.gz",
             'deployLockPath'     => "{$path}/.bankai-deploy.lock",
+            // Unique per run, unlike the release name: identifies the run that holds the lock.
+            'deployRunId'        => $release . '_' . bin2hex(random_bytes(4)),
         ];
     }
 
@@ -135,7 +142,7 @@ class DeploymentConfig
             'sentryEnabled'      => $this->getConfig('bankai.sentry.enabled'),
             'sentryOrg'          => $this->getConfig('bankai.sentry.organization'),
             'sentryProject'      => $this->getConfig('bankai.sentry.project'),
-            'sentryToken'        => $this->getConfig('bankai.sentry.token'),
+            'sentryToken'        => $this->resolveSecret('BANKAI_SENTRY_TOKEN', 'bankai.sentry.token'),
             'sentryVersion'      => $version,
         ];
     }

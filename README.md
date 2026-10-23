@@ -29,55 +29,85 @@ This will:
 - Publish `config/bankai.php` in your config directory.
 - Add `Envoy.blade.php` to your project's root.
 
-Customize `config/bankai.php` according to your project's needs.
+Bankai is configured through environment variables. `config/bankai.php` is
+committed, so it holds no host, user or secret: it only lists the variables
+with their defaults.
 
-### Example configuration (`config/bankai.php`)
+### Environment settings
 
-```php
-return [
-    // General deployment settings
-    'settings' => [
-        // Git repository to deploy (clone strategy only). Use an SSH URL with a
-        // read-only deploy key. HTTPS URLs with embedded credentials are rejected;
-        // CI can inject an ephemeral token-bearing URL through the
-        // BANKAI_REPOSITORY_URL environment variable instead.
-        'repository_url'    => 'git@github.com:your-org/your-repository.git',
-        // Slack Incoming Webhook URL; leave null to disable notifications
-        'slack_webhook_url' => env('BANKAI_SLACK_WEBHOOK_URL'),
-        // How many releases to keep on the server (the live one included)
-        'releases_to_keep'  => 3,
-    ],
+Every setting of a deployment environment is read from a
+`BANKAI_{ENVIRONMENT}_{KEY}` variable first, then from `config/bankai.php`, then
+from the package default. The environment name is upper-cased and any character
+other than a letter or a digit becomes `_` (`pre-prod` reads `BANKAI_PRE_PROD_*`).
 
-    // Define your environments, e.g. staging and production
-    'environments' => [
-        'staging' => [
-            'strategy'         => 'artifact',        // 'artifact' or 'clone', see below
-            'ssh_host'         => 'your-host',       // SSH host of the server
-            'ssh_user'         => 'your-user',       // SSH user used for deployment
-            'url'              => 'https://staging.your-app.com', // Application URL
-            'branch'           => 'main',            // Branch to deploy
-            'path'             => '/var/www/your-app', // Deployment directory on the server
-            'php'              => 'php',              // PHP binary
-            'composer'         => 'composer',         // Composer binary
-            'composer_options' => '',                 // Extra options passed to `composer install`
-            'migration'        => false,              // Run migrations
-            'seeder'           => false,              // Run seeders
-            'maintenance'      => false,              // Toggle maintenance mode during deploy
-            'octane'           => [
-                'install' => false,                   // Install Laravel Octane
-                'reload'  => false,                   // Reload Octane after deploy
-                'server'  => 'swoole',                // roadrunner, swoole, frankenphp or openswoole
-            ],
-            'horizon' => [
-                'terminate' => true,                  // Terminate Horizon after deploy
-            ],
-            'queue' => [
-                'restart' => false,                   // Restart queue workers after deploy
-            ],
-        ],
-    ],
-];
+| Variable (for `production`)            | Default     | Notes                                               |
+|----------------------------------------|-------------|-----------------------------------------------------|
+| `BANKAI_PRODUCTION_SSH_HOST`           | required    | **Environment only**, refused in `config/bankai.php` |
+| `BANKAI_PRODUCTION_SSH_USER`           | required    | **Environment only**, refused in `config/bankai.php` |
+| `BANKAI_PRODUCTION_URL`                | required    | Polled by the health check after the switch          |
+| `BANKAI_PRODUCTION_PATH`               | required    | Deployment directory on the server                   |
+| `BANKAI_PRODUCTION_STRATEGY`           | `clone`     | `artifact` or `clone`, see below                     |
+| `BANKAI_PRODUCTION_BRANCH`             | `main`      |                                                      |
+| `BANKAI_PRODUCTION_PHP`                | `php`       | PHP binary on the server                             |
+| `BANKAI_PRODUCTION_COMPOSER`           | `composer`  | Composer binary                                      |
+| `BANKAI_PRODUCTION_COMPOSER_OPTIONS`   | empty       | Extra options passed to `composer install`           |
+| `BANKAI_PRODUCTION_MIGRATION`          | `false`     | Run migrations                                       |
+| `BANKAI_PRODUCTION_SEEDER`             | `false`     | Run seeders                                          |
+| `BANKAI_PRODUCTION_MAINTENANCE`        | `false`     | Maintenance mode during the deploy                   |
+| `BANKAI_PRODUCTION_OCTANE_INSTALL`     | `false`     | Install Laravel Octane                               |
+| `BANKAI_PRODUCTION_OCTANE_RELOAD`      | `false`     | Reload Octane after the deploy                       |
+| `BANKAI_PRODUCTION_OCTANE_SERVER`      | `swoole`    | `roadrunner`, `swoole`, `frankenphp` or `openswoole`  |
+| `BANKAI_PRODUCTION_HORIZON_TERMINATE`  | `false`     | Terminate Horizon after the deploy                   |
+| `BANKAI_PRODUCTION_QUEUE_RESTART`      | `false`     | Restart queue workers after the deploy               |
+
+Booleans accept `true`/`false`, `1`/`0`, `yes`/`no` and `on`/`off`. The published
+`config/bankai.php` declares `staging` and `production` with project defaults
+(`artifact` strategy, Horizon terminated, migrations in production). An
+environment does not need to be declared there: setting its
+`BANKAI_{ENVIRONMENT}_SSH_HOST` is enough, and its other keys fall back to the
+defaults above.
+
+### General settings and secrets
+
+| Variable                     | Default | Notes                                                        |
+|------------------------------|---------|--------------------------------------------------------------|
+| `BANKAI_REPOSITORY_URL`      | none    | `clone` strategy only. SSH URL with a read-only deploy key, or an ephemeral token-bearing URL injected by CI. Credentials committed in the config are refused |
+| `BANKAI_RELEASES_TO_KEEP`    | `3`     | Releases kept on the server, the live one included           |
+| `BANKAI_SLACK_WEBHOOK_URL`   | none    | **Secret, environment only.** Unset disables notifications   |
+| `BANKAI_SENTRY_ENABLED`      | `false` | See [Sentry integration](#sentry-integration)                 |
+| `BANKAI_SENTRY_ORGANIZATION` | none    |                                                              |
+| `BANKAI_SENTRY_PROJECT`      | none    |                                                              |
+| `BANKAI_SENTRY_TOKEN`        | none    | **Secret, environment only.** Required when Sentry is enabled |
+| `BANKAI_SENTRY_VERSION`      | release | Sentry release name                                          |
+
+Environment-only values written in `config/bankai.php` stop the deployment with
+a message naming the variable to use instead. Resolved values are validated
+before anything reaches the server: a missing SSH host, an invalid URL or
+boolean, or Sentry enabled without a token all fail early.
+
+Variables are read on the machine running Envoy. In GitHub Actions, store them
+as environment secrets and expose them to the deploy step:
+
+```yaml
+- name: Deploy
+  run: vendor/bin/envoy run deploy --env=production
+  env:
+    BANKAI_PRODUCTION_SSH_HOST: ${{ secrets.BANKAI_PRODUCTION_SSH_HOST }}
+    BANKAI_PRODUCTION_SSH_USER: ${{ secrets.BANKAI_PRODUCTION_SSH_USER }}
+    BANKAI_PRODUCTION_URL: https://your-app.com/up
+    BANKAI_PRODUCTION_PATH: /home/forge/your-app.com
+    BANKAI_SLACK_WEBHOOK_URL: ${{ secrets.BANKAI_SLACK_WEBHOOK_URL }}
+    BANKAI_SENTRY_TOKEN: ${{ secrets.BANKAI_SENTRY_TOKEN }}
 ```
+
+For a local deployment, export them in your shell or add them to your local,
+uncommitted `.env`. Do not cache the configuration (`php artisan config:cache`)
+on the deploying machine: a cached configuration stops Laravel from loading `.env`.
+
+> If a secret was ever committed, removing it from the file is not enough: it
+> stays in the Git history. Rotate it (regenerate the Slack webhook, revoke the
+> Sentry token, revoke any token embedded in a repository URL), then store the
+> new value as described above.
 
 ### Example `Envoy.blade.php`
 
@@ -214,7 +244,6 @@ vendor/bin/envoy run deploy --env={your-environment}
 ```
 
 > This can be run from your local machine or from your CI/CD pipeline.
-> At [Axa Zara](https://axazara.com), we deploy automatically after each merge to the `staging` or `release` branch.
 
 ### Step 5 — Configure your web server
 
@@ -310,10 +339,14 @@ aborts immediately with the timestamp of the run holding it. This guarantees two
 deployments can never interleave: without it, two concurrent runs would race on
 `incoming.tar.gz`, migrations and the `current` symlink.
 
-The lock is released at the end of a successful deploy. It is deliberately
-**not** released on failure, because a half-finished deploy left the server in
-a state that deserves a human look. Once you have checked (and rolled back if
-needed), release it with:
+The lock is released at the end of a successful deploy, and also when the
+deploy fails: the run records a unique id in the lock, and the failure
+handler removes the lock only if that id matches. A run refused because
+another deployment holds the lock therefore leaves that lock alone. The failure
+notification reminds you to check the server and roll back if needed.
+
+If a run is interrupted before it can clean up (killed process, lost
+connection), release the lock with:
 
 ```shell
 vendor/bin/envoy run deploy:unlock --env={your-environment}
@@ -335,24 +368,21 @@ vendor/bin/envoy run deploy:unlock --env={your-environment}
 
 ## Sentry integration
 
-Bankai can record a release in Sentry after each deployment. To enable it, add a
-`sentry` block to `config/bankai.php`:
+Bankai can record a release in Sentry after each deployment. Enable it with
+`BANKAI_SENTRY_ENABLED=true`, then set `BANKAI_SENTRY_ORGANIZATION`,
+`BANKAI_SENTRY_PROJECT` and the `BANKAI_SENTRY_TOKEN` secret
+([how to create a token](https://docs.sentry.io/product/accounts/auth-tokens)).
+`BANKAI_SENTRY_VERSION` overrides the release name, which defaults to the
+current release.
 
-```php
-'sentry' => [
-    'enabled'      => false,
-    'organization' => 'your-organization',
-    'project'      => 'your-project',
-    'token'        => 'your-token',
-    'version'      => null, // Defaults to the current release name when null
-],
-```
+## Upgrading from 2.x
 
-- `sentry.enabled`: Set to `true` to enable Sentry integration.
-- `sentry.organization`: Your Sentry organization.
-- `sentry.project`: Your Sentry project.
-- `sentry.token`: Your Sentry auth token. Learn more [here](https://docs.sentry.io/product/accounts/auth-tokens).
-- `sentry.version`: The Sentry release version. Defaults to the current release name.
+3.0 moves server access and secrets out of `config/bankai.php`:
+
+1. Republish the configuration (`php artisan bankai:install`, answer yes to overwrite) or remove from your own file every `ssh_host`, `ssh_user`, `slack_webhook_url` and `sentry.token` value.
+2. Provide them instead as `BANKAI_{ENVIRONMENT}_SSH_HOST`, `BANKAI_{ENVIRONMENT}_SSH_USER`, `BANKAI_SLACK_WEBHOOK_URL` and `BANKAI_SENTRY_TOKEN` (CI secrets, or your local `.env`).
+3. Move the other values to their variables, or keep them in the file through `env()` with your defaults.
+4. Rotate any secret that was committed before.
 
 ## Contributing
 

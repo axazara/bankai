@@ -96,4 +96,16 @@ final class EnvoyCompilationTest extends BaseTestCase
             $source,
         );
     }
+
+    public function test_a_failed_run_releases_the_deployment_lock_it_holds(): void
+    {
+        $source = file_get_contents(__DIR__ . '/../src/Envoy.blade.php');
+
+        // The owner file is what lets a failed run release its own lock and no other.
+        $this->assertStringContainsString('echo "{{ $deployRunId }}" > "{{ $deployLockPath }}/owner"', $source);
+        $this->assertStringContainsString(
+            '\AxaZara\Bankai\DeployLock::releaseIfOwned($sshUser, $sshHost, $deployLockPath, $deployRunId);',
+            $source,
+        );
+    }
 }

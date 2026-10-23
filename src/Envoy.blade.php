@@ -141,6 +141,7 @@
    # mkdir is atomic: it either creates the lock or fails because one exists.
    if mkdir "{{ $deployLockPath }}" 2>/dev/null; then
        date '+%Y-%m-%d %H:%M:%S' > "{{ $deployLockPath }}/started_at"
+       echo "{{ $deployRunId }}" > "{{ $deployLockPath }}/owner"
        echo "Deployment lock acquired"
    else
        echo "Another deployment appears to be in progress since $(cat "{{ $deployLockPath }}/started_at" 2>/dev/null || echo 'unknown')."
@@ -689,13 +690,17 @@
        - Deployment path: $path
        - SSH host: $sshHost
        - Date: $date
-       If the deployment lock was left behind, release it with 'envoy run deploy:unlock --env=$env'.";
+       Check the server and roll back if needed with 'envoy run deploy:rollback --env=$env'.";
 
    // Not Envoy's own slack directive: it posts unconditionally, so a deployment
    // that fails with no webhook configured raises a notification error on top of
    // the real one. Slack::send() no-ops on a null or empty URL, matching the
    // emptiness guard the two success notification paths already carry.
    \AxaZara\Bankai\Slack::send($failureMessage, $slackWebhookUrl);
+
+   // A failed run must not block the next one: it releases the lock it holds,
+   // and only that one, so a run refused by another deployment's lock leaves it alone.
+   \AxaZara\Bankai\DeployLock::releaseIfOwned($sshUser, $sshHost, $deployLockPath, $deployRunId);
 
    echo "Envoy task has failed";
 @enderror

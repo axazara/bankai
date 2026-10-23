@@ -69,6 +69,7 @@ final class EnvoyTemplateLoadTest extends BaseTestCase
             'artifactsPath'      => '/var/www/app/artifacts',
             'artifactPath'       => '/var/www/app/artifacts/incoming.tar.gz',
             'deployLockPath'     => '/var/www/app/.bankai-deploy.lock',
+            'deployRunId'        => 'staging_20260101_000000_1a2b3c4d',
             'sentryEnabled'      => false,
             'sentryOrg'          => 'acme',
             'sentryProject'      => 'app',
