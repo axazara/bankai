@@ -244,7 +244,6 @@ vendor/bin/envoy run deploy --env={your-environment}
 ```
 
 > This can be run from your local machine or from your CI/CD pipeline.
-> At [Axa Zara](https://axazara.com), we deploy automatically after each merge to the `staging` or `release` branch.
 
 ### Step 5 — Configure your web server
 
