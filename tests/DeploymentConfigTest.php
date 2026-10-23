@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests;
 
 use AxaZara\Bankai\DeploymentConfig;
+use AxaZara\Bankai\EnvironmentSettings;
 use RuntimeException;
 
 class DeploymentConfigTest extends TestCase
@@ -76,7 +77,7 @@ class DeploymentConfigTest extends TestCase
 
     public function test_the_named_block_points_at_the_environment_that_failed(): void
     {
-        config(['bankai.environments.staging.ssh_host' => null]);
+        config(['bankai.environments.staging.url' => null]);
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Invalid configuration for [bankai.environments.staging]');
@@ -185,11 +186,22 @@ class DeploymentConfigTest extends TestCase
         });
     }
 
-    public function test_the_slack_webhook_url_environment_variable_overrides_the_configured_value(): void
+    public function test_a_slack_webhook_url_committed_in_the_config_is_refused(): void
     {
-        config(['bankai.settings.slack_webhook_url' => 'https://hooks.slack.com/services/configured']);
+        config(['bankai.settings.slack_webhook_url' => 'https://hooks.slack.com/services/committed']);
 
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('bankai.settings.slack_webhook_url must not be set in config/bankai.php');
+
+        new DeploymentConfig('staging');
+    }
+
+    public function test_a_secret_read_through_env_in_the_config_is_accepted(): void
+    {
+        // An app still carrying 'slack_webhook_url' => env('BANKAI_SLACK_WEBHOOK_URL') keeps working.
         $this->withEnvironmentVariable('BANKAI_SLACK_WEBHOOK_URL', 'https://hooks.slack.com/services/from/ci/secret', function (): void {
+            config(['bankai.settings.slack_webhook_url' => 'https://hooks.slack.com/services/from/ci/secret']);
+
             $variables = (new DeploymentConfig('staging'))->extractVariables();
 
             $this->assertSame('https://hooks.slack.com/services/from/ci/secret', $variables['slackWebhookUrl']);
@@ -218,15 +230,17 @@ class DeploymentConfigTest extends TestCase
         });
     }
 
-    public function test_the_sentry_token_environment_variable_overrides_the_configured_value(): void
+    public function test_a_sentry_token_committed_in_the_config_is_refused(): void
     {
-        config(['bankai.sentry.enabled' => true]);
+        config([
+            'bankai.sentry.enabled' => true,
+            'bankai.sentry.token'   => 'sntrys_committed',
+        ]);
 
-        $this->withEnvironmentVariable('BANKAI_SENTRY_TOKEN', 'sntrys_from_ci', function (): void {
-            $variables = (new DeploymentConfig('staging'))->extractVariables();
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('bankai.sentry.token must not be set in config/bankai.php');
 
-            $this->assertSame('sntrys_from_ci', $variables['sentryToken']);
-        });
+        new DeploymentConfig('staging');
     }
 
     public function test_it_throws_when_sentry_is_enabled_without_a_token(): void
@@ -250,6 +264,103 @@ class DeploymentConfigTest extends TestCase
 
             new DeploymentConfig('staging');
         });
+    }
+
+    public function test_the_ssh_host_and_user_come_from_the_environment(): void
+    {
+        $variables = (new DeploymentConfig('staging'))->extractVariables();
+
+        $this->assertSame('staging.example.com', $variables['sshHost']);
+        $this->assertSame('deploy', $variables['sshUser']);
+    }
+
+    public function test_it_names_the_variable_when_the_ssh_host_is_missing(): void
+    {
+        $this->unsetEnvironmentVariable('BANKAI_STAGING_SSH_HOST');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Set BANKAI_STAGING_SSH_HOST');
+
+        new DeploymentConfig('staging');
+    }
+
+    public function test_an_ssh_user_committed_in_the_config_is_refused(): void
+    {
+        config(['bankai.environments.staging.ssh_user' => 'forge']);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('bankai.environments.staging.ssh_user must not be set in config/bankai.php');
+
+        new DeploymentConfig('staging');
+    }
+
+    public function test_an_environment_variable_overrides_the_configured_setting(): void
+    {
+        $this->setEnvironmentVariable('BANKAI_STAGING_PATH', '/home/forge/app');
+        $this->setEnvironmentVariable('BANKAI_STAGING_MIGRATION', 'true');
+        $this->setEnvironmentVariable('BANKAI_STAGING_OCTANE_SERVER', 'frankenphp');
+
+        $variables = (new DeploymentConfig('staging'))->extractVariables();
+
+        $this->assertSame('/home/forge/app', $variables['path']);
+        $this->assertTrue($variables['migration']);
+        $this->assertSame('frankenphp', $variables['octaneServer']);
+    }
+
+    public function test_an_environment_can_be_defined_through_environment_variables_only(): void
+    {
+        $this->setEnvironmentVariable('BANKAI_PRE_PROD_SSH_HOST', 'preprod.example.com');
+        $this->setEnvironmentVariable('BANKAI_PRE_PROD_SSH_USER', 'forge');
+        $this->setEnvironmentVariable('BANKAI_PRE_PROD_URL', 'https://preprod.example.com');
+        $this->setEnvironmentVariable('BANKAI_PRE_PROD_PATH', '/home/forge/preprod');
+        $this->setEnvironmentVariable('BANKAI_PRE_PROD_STRATEGY', 'artifact');
+
+        $variables = (new DeploymentConfig('pre-prod'))->extractVariables();
+
+        $this->assertSame('preprod.example.com', $variables['sshHost']);
+        $this->assertSame('main', $variables['branch']);
+        $this->assertSame('php', $variables['php']);
+        $this->assertFalse($variables['migration']);
+        $this->assertFalse($variables['horizonTerminate']);
+    }
+
+    public function test_an_invalid_boolean_from_the_environment_is_refused(): void
+    {
+        $this->setEnvironmentVariable('BANKAI_STAGING_MIGRATION', 'sometimes');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('BANKAI_STAGING_URL');
+
+        new DeploymentConfig('staging');
+    }
+
+    public function test_the_published_configuration_deploys_from_environment_variables_alone(): void
+    {
+        $this->setEnvironmentVariable('BANKAI_PRODUCTION_SSH_HOST', 'app.example.com');
+        $this->setEnvironmentVariable('BANKAI_PRODUCTION_SSH_USER', 'forge');
+        $this->setEnvironmentVariable('BANKAI_PRODUCTION_URL', 'https://app.example.com/up');
+        $this->setEnvironmentVariable('BANKAI_PRODUCTION_PATH', '/home/forge/app.example.com');
+        $this->setEnvironmentVariable('BANKAI_PRODUCTION_OCTANE_SERVER', 'frankenphp');
+        $this->setEnvironmentVariable('BANKAI_SLACK_WEBHOOK_URL', 'https://hooks.slack.com/services/from/ci/secret');
+
+        config(['bankai' => require __DIR__ . '/../config/bankai.php']);
+
+        $variables = (new DeploymentConfig('production'))->extractVariables();
+
+        $this->assertSame('artifact', $variables['strategy']);
+        $this->assertSame('forge', $variables['sshUser']);
+        $this->assertSame('/home/forge/app.example.com', $variables['path']);
+        $this->assertSame('frankenphp', $variables['octaneServer']);
+        $this->assertTrue($variables['migration']);
+        $this->assertTrue($variables['horizonTerminate']);
+        $this->assertSame('https://hooks.slack.com/services/from/ci/secret', $variables['slackWebhookUrl']);
+        $this->assertFalse($variables['sentryEnabled']);
+    }
+
+    public function test_environment_variable_names_are_normalised(): void
+    {
+        $this->assertSame('BANKAI_PRE_PROD_OCTANE_RELOAD', EnvironmentSettings::variable('pre-prod', 'octane.reload'));
+        $this->assertSame('BANKAI_PRODUCTION_SSH_HOST', EnvironmentSettings::variable('production', 'ssh_host'));
     }
 
     /**

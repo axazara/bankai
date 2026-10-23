@@ -49,6 +49,8 @@ To test against a specific Laravel line, constrain Testbench, e.g.:
 src/
   Bankai.php                            # bootstrap($env): boots Laravel and returns the deploy variables
   DeploymentConfig.php                  # Builds + validates the deploy variables for a given env
+  EnvironmentSettings.php               # Resolves an environment from BANKAI_{ENV}_{KEY}, config, then defaults
+  DeployLock.php                        # Releases the deploy lock a failed run holds
   Traits/ConfigValidationTrait.php      # Shared config validation helpers
   Slack.php                             # Slack webhook notification helper
   Providers/BankaiServiceProvider.php   # Registers the command; publishes config
@@ -67,7 +69,7 @@ The deployment flow is entirely Envoy-driven: `setup` provisions the releases/sh
 - Static analysis runs at PHPStan level 4 with Larastan; run `composer analyse` and fix all errors before opening a PR.
 - Tests live under `tests/` and use PHPUnit with Orchestra Testbench. The `Tests` workflow runs them across PHP 8.1–8.4 and Laravel 10–13.
 - The package registers itself via Laravel's package auto-discovery (`extra.laravel.providers`); no manual registration is needed by consumers.
-- Supports multiple named deployment environments defined in `config/bankai.php`; environment name is passed at runtime via `--env={name}`.
+- Supports multiple named deployment environments; the name is passed at runtime via `--env={name}`. Each setting is read from `BANKAI_{ENV}_{KEY}` first (see `EnvironmentSettings`), then `config/bankai.php`, then the package default. SSH host/user, the Slack webhook and the Sentry token are environment-only: a value committed in the config is refused.
 - All shell interpolations of config values in `Envoy.blade.php` should be quoted (e.g. `"{{ $repositoryUrl }}"`) to avoid word-splitting.
 
 ## Release flow
